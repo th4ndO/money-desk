@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+/*
+ * One accent colour; green / amber / red are reserved for status.
+ * Light and dark follow the system setting.
+ */
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #1c1c1a;
+  --muted: #6b6b66;
+  --border: #e3e3de;
+  --accent: #3f4fd8;
+  --accent-text: #ffffff;
+  --good: #1d7a46;
+  --good-bg: #e6f4ea;
+  --warn: #8a5a00;
+  --warn-bg: #fdf1d8;
+  --bad: #b42318;
+  --bad-bg: #fde8e6;
+  --focus: #3f4fd8;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121211;
+    --surface: #1b1b1a;
+    --text: #ecece8;
+    --muted: #a0a09a;
+    --border: #2e2e2b;
+    --accent: #9aa5ff;
+    --accent-text: #121211;
+    --good: #6fd09a;
+    --good-bg: #16301f;
+    --warn: #f0c060;
+    --warn-bg: #33270e;
+    --bad: #ff8a80;
+    --bad-bg: #3a1714;
+    --focus: #9aa5ff;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .money {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  .input {
+    display: block;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 1rem;
+  }
+  .input:focus-visible {
+    outline-offset: 0;
+    border-color: var(--focus);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+  }
+  .btn:disabled {
+    opacity: 0.6;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .btn-quiet {
+    color: var(--muted);
+  }
+  .btn-quiet:hover {
+    color: var(--text);
+  }
+  .notice {
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 0.9375rem;
+  }
+  .notice-bad {
+    background: var(--bad-bg);
+    border-color: transparent;
+    color: var(--bad);
+  }
+}
