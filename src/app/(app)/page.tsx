@@ -25,6 +25,8 @@ export default async function Dashboard() {
   const { cycle, items, transactions } = bundle;
   const s = summariseCycle(cycle, items, transactions, today);
   const closed = cycle.closed_at !== null;
+  const billItems = items.filter((i) => i.kind !== "envelope");
+  const billsPlanned = billItems.reduce((t, i) => t + i.planned_cents, 0);
 
   return (
     <div className="space-y-6">
@@ -104,8 +106,35 @@ export default async function Dashboard() {
         )}
       </section>
 
+      <section aria-labelledby="plan-title">
+        <div className="mb-1 flex items-baseline justify-between">
+          <h2 id="plan-title" className="section-title">Bills and savings</h2>
+          <span className="text-sm text-muted">
+            <Money cents={billsPlanned} /> allocated
+          </span>
+        </div>
+        <ul>
+          {billItems.map((b) => (
+            <BillRow key={b.id} item={b} today={today} readOnly={closed} />
+          ))}
+        </ul>
+      </section>
+
+      <section className="card text-sm" aria-label="Plan totals">
+        <dl className="grid grid-cols-2 gap-1">
+          <dt className="text-muted">Bills and savings</dt>
+          <dd className="text-right"><Money cents={billsPlanned} /></dd>
+          <dt className="text-muted">Envelopes</dt>
+          <dd className="text-right"><Money cents={s.envelopes.reduce((t, e) => t + e.planned, 0)} /></dd>
+          <dt className="font-semibold">Total allocated</dt>
+          <dd className="text-right font-semibold"><Money cents={s.planned} /></dd>
+          <dt className="text-muted">Pocket</dt>
+          <dd className="text-right"><Money cents={s.pocket} /></dd>
+        </dl>
+      </section>
+
       <Link href={`/cycles/${cycle.id}`} className="btn btn-secondary w-full">
-        All bills, envelopes and spending
+        Edit amounts and see all spending
       </Link>
     </div>
   );
