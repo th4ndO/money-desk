@@ -16,11 +16,11 @@ export const metadata = { title: "Today" };
 export default async function Dashboard() {
   const { supabase } = await requireUser();
   const today = todayJHB();
-  const current = await getCycleCovering(supabase, today);
+  const [current, ready] = await Promise.all([getCycleCovering(supabase, today), getReadyToAllocate(supabase)]);
 
   if (!current) return <NoCycle today={today} />;
 
-  const [bundle, ready] = await Promise.all([getCycleBundle(supabase, current.id), getReadyToAllocate(supabase)]);
+  const bundle = await getCycleBundle(supabase, current.id);
   if (!bundle) return <NoCycle today={today} />;
   const { cycle, items, transactions } = bundle;
   const s = summariseCycle(cycle, items, transactions, today);

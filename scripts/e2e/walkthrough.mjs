@@ -27,6 +27,15 @@ const page = await ctx.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 
+/** Go to a page and wait until its loading placeholder has been replaced. */
+async function settled() {
+  await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), null, { timeout: 15000 });
+}
+async function go(path) {
+  await page.goto(BASE + path);
+  await settled();
+}
+
 async function noSideScroll(label) {
   const w = await page.evaluate(() => document.documentElement.scrollWidth);
   check(`no sideways scroll at 375px: ${label}`, w <= 375, `scrollWidth=${w}`);
@@ -41,9 +50,9 @@ async function shot(name) {
 }
 
 // 1. Signed out
-await page.goto(BASE + "/");
+await go("/");
 check("signed-out visit to / lands on /login", page.url().endsWith("/login"), page.url());
-await page.goto(BASE + "/cycles");
+await go("/cycles");
 check("signed-out visit to /cycles lands on /login", page.url().endsWith("/login"));
 const exp = await page.request.get(BASE + "/export/json", { maxRedirects: 0 });
 check("signed-out export is refused", exp.status() === 307 || exp.status() === 401, `HTTP ${exp.status()}`);
@@ -59,20 +68,20 @@ check("email link is offered as a fallback", (await page.getByRole("button", { n
 
 // 2. Wrong account gets signed out
 await ctx.addCookies([sessionCookie("intruder@test", "33333333-3333-4333-8333-333333333333")]);
-await page.goto(BASE + "/");
+await go("/");
 check("a session for another email is thrown out", page.url().includes("/login?error=not-allowed"), page.url());
 await ctx.clearCookies();
 
 // 3. Sign in as me, load starting data
 await ctx.addCookies([sessionCookie("me@test", "22222222-2222-4222-8222-222222222222")]);
-await page.goto(BASE + "/");
+await go("/");
 check("signed in, empty account offers a way to start", (await page.textContent("main")).includes("Recurring"));
-await page.goto(BASE + "/settings");
+await go("/settings");
 await page.getByRole("button", { name: "Load my starting data" }).click();
 check("starting data loads", await toast("Loaded your starting data"));
 
 // 4. Dashboard for October (today is 19 Oct 2026)
-await page.goto(BASE + "/");
+await go("/");
 let main = await page.textContent("main");
 check("dashboard shows the October cycle", main.includes("October 2026"));
 check("left in pocket = R3 362 (bills and savings paid)", main.includes("R3 362"));
@@ -92,13 +101,14 @@ check("left in pocket drops to R3 212", true, `${Date.now() - t0} ms including t
 check("amount field clears after logging", (await page.getByLabel("Amount (R)").inputValue()) === "");
 
 // 6. Cycles list → start January
-await page.goto(BASE + "/cycles");
+await go("/cycles");
 main = await page.textContent("main");
 check("cycles list shows October, November, December", ["October 2026", "November 2026", "December 2026"].every((n) => main.includes(n)));
 await noSideScroll("cycles");
 await shot("03-cycles");
 await page.getByRole("button", { name: "Start January cycle" }).click();
 await page.waitForURL(/\/cycles\/[0-9a-f-]{36}$/, { timeout: 10000 });
+await settled();
 main = await page.textContent("main");
 check("January 2027 cycle created", main.includes("January 2027"));
 check("January runs 23 Dec 2026 – 22 Jan 2027", main.includes("23 Dec 2026") && main.includes("22 Jan 2027"));
@@ -117,11 +127,11 @@ check("Netflix stays ticked after the server round trip", true);
 
 // 8. Starting the same cycle twice is impossible
 const dup = await page.evaluate(async () => document.body.innerText.includes("January 2027"));
-await page.goto(BASE + "/cycles");
+await go("/cycles");
 check("next offer moves on to February", (await page.textContent("main")).includes("Start February cycle") && dup);
 
 // 9. Recurring page
-await page.goto(BASE + "/recurring");
+await go("/recurring");
 main = await page.textContent("main");
 check("recurring explains changes apply to future cycles", main.includes("apply to cycles you start from now on"));
 check("rent shows as switched off", main.includes("Rent") && main.includes("Off"));
@@ -129,7 +139,7 @@ await noSideScroll("recurring");
 await shot("05-recurring");
 
 // 10. Income + runway
-await page.goto(BASE + "/income");
+await go("/income");
 await page.getByLabel("Bank balance now (R)").fill("20 000");
 await page.getByRole("button", { name: "Update balance" }).click();
 check("balance saves", await toast("Balance set to R20"));
@@ -144,13 +154,13 @@ await noSideScroll("income");
 await shot("06-income");
 
 // 11. Reserves
-await page.goto(BASE + "/reserves");
+await go("/reserves");
 main = await page.textContent("main");
 check("reserves total R6 737", main.includes("R6 737"));
 await noSideScroll("reserves");
 
 // 11b. Allocate income: R500 to Personal (this cycle) and R2 000 to the Savings pot
-await page.goto(BASE + "/allocate");
+await go("/allocate");
 main = await page.textContent("main");
 check("allocate page shows R8 500 ready", main.includes("R8\u00a0500"));
 await page.getByRole("textbox", { name: "Personal" }).fill("500");
@@ -161,7 +171,7 @@ await shot("11-allocate");
 await page.getByRole("button", { name: /^Allocate R2/ }).click();
 check("allocating says what is left", await toast("Allocated R2\u00a0500. R6\u00a0000 left to allocate."));
 
-await page.goto(BASE + "/");
+await go("/");
 main = await page.textContent("main");
 check("dashboard shows R6 000 ready to allocate", main.includes("Ready to allocate") && main.includes("R6\u00a0000"));
 check("Personal now has R1 500 allocated", main.includes("R1\u00a0500 allocated"));
@@ -178,25 +188,25 @@ check("Personal shows R1 250 left", true);
 await shot("12-dashboard-after-allocation");
 
 // Undo the Savings allocation
-await page.goto(BASE + "/reserves");
+await go("/reserves");
 check("Savings pot went up to R4 000", (await page.textContent("main")).includes("R4\u00a0000"));
-await page.goto(BASE + "/income");
+await go("/income");
 page.once("dialog", (d) => d.accept());
 await page.locator("li", { hasText: "Savings (reserve)" }).getByRole("button", { name: "Undo" }).click();
 check("undo puts the money back", await toast("Undone"));
 await page.getByText("R8\u00a0000").first().waitFor({ timeout: 8000 });
 check("ready to allocate back to R8 000", true);
-await page.goto(BASE + "/reserves");
+await go("/reserves");
 check("Savings pot back to R2 000", (await page.textContent("main")).includes("R2\u00a0000"));
 
 // 12. Todos
-await page.goto(BASE + "/todos");
+await go("/todos");
 await page.getByRole("checkbox", { name: /Claim UIF.*not done/ }).click();
 check("ticking a to-do says Done", await toast("Done"));
 await noSideScroll("todos");
 
 // 13. Export then restore
-await page.goto(BASE + "/settings");
+await go("/settings");
 const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download full backup (JSON)" }).click()]);
 const file = `${SHOTS}/backup.json`;
 await download.saveAs(file);
@@ -213,8 +223,10 @@ await noSideScroll("settings");
 await shot("07-settings");
 
 // 14. Close October and see the review
-await page.goto(BASE + "/cycles");
+await go("/cycles");
 await page.getByRole("link", { name: /October 2026/ }).click();
+await page.waitForURL(/\/cycles\/[0-9a-f-]{36}$/);
+await settled();
 page.once("dialog", (d) => d.accept());
 await page.getByRole("button", { name: "Close cycle" }).click();
 check("closing a cycle", await toast("Cycle closed"));
@@ -228,7 +240,7 @@ await page.getByRole("button", { name: "Reopen cycle" }).click();
 check("reopening a cycle", await toast("Cycle reopened"));
 
 // 15. Sign out
-await page.goto(BASE + "/settings");
+await go("/settings");
 await page.getByRole("button", { name: "Sign out" }).click();
 await page.waitForURL(/\/login$/);
 check("sign out goes to /login", true);
@@ -237,8 +249,9 @@ check("sign out goes to /login", true);
 await page.getByLabel("PIN").fill("2471");
 await page.getByRole("button", { name: "Unlock" }).click();
 await page.waitForURL(BASE + "/", { timeout: 10000 });
+await settled();
 check("PIN 2471 signs in and opens Today", (await page.textContent("main")).includes("Left in pocket"));
-await page.goto(BASE + "/settings");
+await go("/settings");
 await page.getByLabel("New PIN").fill("8642");
 await page.getByLabel("Same again").fill("8642");
 await page.getByRole("button", { name: "Change PIN" }).click();

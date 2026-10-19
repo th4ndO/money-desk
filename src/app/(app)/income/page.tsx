@@ -23,10 +23,16 @@ export default async function IncomePage() {
     supabase.from("income").select("id, amount_cents, date, source, notes").order("date", { ascending: false }).limit(200),
     supabase.from("reserves").select("id, name, balance_cents, spendable"),
   ]);
-  const [ready, allocRes, itemNames] = await Promise.all([
+  // One more round of queries, all at once: allocation history, the current
+  // cycle's figures, and the items of cycles already created ahead.
+  const nextStart = current ? addDays(current.end_date, 1) : cycleStartFor(today, settings.cycle_start_day);
+  const future = cycles.filter((c) => c.start_date >= nextStart && !c.closed_at);
+  const [ready, allocRes, itemNames, bundle, { items: futureItems }] = await Promise.all([
     getReadyToAllocate(supabase),
     supabase.from("allocations").select("id, cycle_item_id, reserve_id, amount_cents, date, note").order("date", { ascending: false }).order("created_at", { ascending: false }).limit(50),
     supabase.from("cycle_items").select("id, name, cycles(name)"),
+    current && !current.closed_at ? getCycleBundle(supabase, current.id) : Promise.resolve(null),
+    getItemsAndTransactions(supabase, future.map((c) => c.id)),
   ]);
   const allocations = allocRes.data ?? [];
   const itemLabel = new Map(
@@ -41,16 +47,10 @@ export default async function IncomePage() {
 
   // What the current cycle still needs: unpaid bills plus unspent envelope money.
   let currentCommitted = 0;
-  if (current && !current.closed_at) {
-    const bundle = await getCycleBundle(supabase, current.id);
-    if (bundle) {
-      const s = summariseCycle(bundle.cycle, bundle.items, bundle.transactions, today);
-      currentCommitted = s.billsDue + s.envelopes.reduce((sum, e) => sum + Math.max(0, e.remaining), 0);
-    }
+  if (bundle) {
+    const s = summariseCycle(bundle.cycle, bundle.items, bundle.transactions, today);
+    currentCommitted = s.billsDue + s.envelopes.reduce((sum, e) => sum + Math.max(0, e.remaining), 0);
   }
-  const nextStart = current ? addDays(current.end_date, 1) : cycleStartFor(today, settings.cycle_start_day);
-  const future = cycles.filter((c) => c.start_date >= nextStart && !c.closed_at);
-  const { items: futureItems } = await getItemsAndTransactions(supabase, future.map((c) => c.id));
   const futureCycles = future
     .map((c) => ({
       name: c.name,
