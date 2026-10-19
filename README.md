@@ -36,4 +36,11 @@ Email link or 6-digit code, for `ALLOWED_EMAIL` only. Three layers:
 2. `src/proxy.ts` and `/auth/confirm` sign out any session whose email isn't `ALLOWED_EMAIL`.
 3. Row Level Security limits every row to `auth.uid() = user_id`; the `anon` role has no table access.
 
-Deploying, backups and starting a new cycle are documented in Phase 4.
+## Using it
+
+- **Start a new cycle:** on Today, when no cycle covers today, tap "Start [Month] cycle". Or on Cycles,
+  "Start [Month] cycle" adds the one after the latest. Amounts and due dates come from Recurring.
+- **Back up:** Settings → "Download full backup (JSON)". Restore it in Settings (replaces everything).
+- **First run:** Settings → "Load my starting data" (only while the account is empty).
+
+Deployment steps are in `docs/STATUS.md` until Phase 4 is done.

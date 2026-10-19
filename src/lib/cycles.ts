@@ -166,3 +166,63 @@ export function generateCycleItems(
 export function plannedTotal(items: readonly { planned_cents: Cents }[]): Cents {
   return items.reduce((sum, i) => sum + i.planned_cents, 0);
 }
+
+export interface ExistingCycle {
+  start_date: ISODate;
+  end_date: ISODate;
+}
+
+/**
+ * Bounds for a new cycle starting on `start`, shortened if needed so it
+ * ends the day before the next cycle that already exists. Returns null if
+ * `start` is already inside an existing cycle.
+ */
+export function newCycleBounds(
+  start: ISODate,
+  startDay: number,
+  existing: readonly ExistingCycle[],
+): CycleBounds | null {
+  if (existing.some((c) => c.start_date <= start && start <= c.end_date)) return null;
+  const b = cycleBounds(start, startDay);
+  const nextExisting = existing
+    .map((c) => c.start_date)
+    .filter((s) => s > start)
+    .sort()[0];
+  if (nextExisting && nextExisting <= b.end_date) {
+    const end = addDays(nextExisting, -1);
+    return { start_date: start, end_date: end, name: cycleName(end) };
+  }
+  return b;
+}
+
+/**
+ * The cycle to offer when no cycle covers today: the one containing today,
+ * starting the day after the previous cycle if that ended late.
+ */
+export function proposeCycleForToday(
+  today: ISODate,
+  startDay: number,
+  existing: readonly ExistingCycle[],
+): CycleBounds | null {
+  let start = cycleStartFor(today, startDay);
+  const prevEnd = existing
+    .map((c) => c.end_date)
+    .filter((e) => e < today)
+    .sort()
+    .at(-1);
+  if (prevEnd && prevEnd >= start) start = addDays(prevEnd, 1);
+  return newCycleBounds(start, startDay, existing);
+}
+
+/** The cycle after the latest one, or the one containing today if there are none. */
+export function proposeNextCycle(
+  today: ISODate,
+  startDay: number,
+  existing: readonly ExistingCycle[],
+): CycleBounds | null {
+  const latestEnd = existing.map((c) => c.end_date).sort().at(-1);
+  if (!latestEnd) return newCycleBounds(cycleStartFor(today, startDay), startDay, existing);
+  // If the start day changed since the last cycle, this still ends at the
+  // next proper boundary, so the following cycle is back on schedule.
+  return cycleBounds(addDays(latestEnd, 1), startDay);
+}

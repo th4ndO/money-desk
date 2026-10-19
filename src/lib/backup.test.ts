@@ -1,0 +1,98 @@
+import { describe, expect, it } from "vitest";
+import { backupCounts, parseBackup, toCSV } from "./backup";
+import { plannedTotal } from "./cycles";
+import { buildSeedBackup } from "./seed-data";
+
+let counter = 0;
+const fakeId = () => `00000000-0000-4000-8000-${String(++counter).padStart(12, "0")}`;
+
+describe("seed backup", () => {
+  const seed = buildSeedBackup("2026-10-19", fakeId);
+
+  it("is a valid backup", () => {
+    expect(parseBackup(JSON.stringify(seed)).ok).toBe(true);
+  });
+
+  it("has the expected rows", () => {
+    expect(backupCounts(seed)).toEqual({
+      recurring_items: 19,
+      cycles: 3,
+      cycle_items: 45,
+      transactions: 0,
+      income: 0,
+      reserves: 2,
+      todos: 5,
+    });
+  });
+
+  it("plans R9 745 in every seeded cycle", () => {
+    for (const c of seed.cycles) {
+      expect(plannedTotal(seed.cycle_items.filter((i) => i.cycle_id === c.id))).toBe(974500);
+      expect(c.pocket_cents).toBe(974500);
+    }
+  });
+
+  it("ticks October bills due by the load date, and savings everywhere", () => {
+    const oct = seed.cycles[0].id;
+    const paidOct = seed.cycle_items.filter((i) => i.cycle_id === oct && i.paid).map((i) => i.name);
+    // Due 23 Sep–19 Oct: everything except nothing later in October (cycle ends 22 Oct).
+    expect(paidOct).toContain("Savings");
+    expect(paidOct).toContain("Spotify Student");
+    expect(paidOct).not.toContain("Groceries");
+    for (const c of seed.cycles.slice(1)) {
+      const paid = seed.cycle_items.filter((i) => i.cycle_id === c.id && i.paid).map((i) => i.name);
+      expect(paid).toEqual(["Savings"]);
+    }
+  });
+
+  it("leaves October bills due after the load date unticked", () => {
+    const early = buildSeedBackup("2026-10-01", fakeId);
+    const oct = early.cycles[0].id;
+    const unpaid = early.cycle_items.filter((i) => i.cycle_id === oct && i.kind === "bill" && !i.paid).map((i) => i.name);
+    expect(unpaid).toEqual(["Rain Wi-Fi", "Apple iCloud", "Spotify Student"]);
+  });
+});
+
+describe("parseBackup", () => {
+  const good = buildSeedBackup("2026-10-19", fakeId);
+
+  it("rejects non-JSON and other files", () => {
+    expect(parseBackup("not json")).toEqual({ ok: false, error: "That file isn't valid JSON." });
+    expect(parseBackup('{"hello":1}').ok).toBe(false);
+  });
+
+  it("rejects floats in amounts", () => {
+    const bad = structuredClone(good);
+    bad.income.push({ id: fakeId(), amount_cents: 10.5, date: "2026-10-01", source: "x", notes: null });
+    expect(parseBackup(JSON.stringify(bad)).ok).toBe(false);
+  });
+
+  it("rejects dangling references", () => {
+    const bad = structuredClone(good);
+    bad.transactions.push({ id: fakeId(), cycle_id: fakeId(), cycle_item_id: null, amount_cents: 100, date: "2026-10-01", note: null });
+    const r = parseBackup(JSON.stringify(bad));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("missing cycle");
+  });
+
+  it("rejects impossible dates", () => {
+    const bad = structuredClone(good);
+    bad.todos[0].due_date = "2027-02-29";
+    expect(parseBackup(JSON.stringify(bad)).ok).toBe(false);
+  });
+});
+
+describe("toCSV", () => {
+  it("adds a rands column next to each cents column and quotes awkward text", () => {
+    expect(
+      toCSV([
+        { name: 'Check "Apple", R180', amount_cents: 18000 },
+        { name: "Plain", amount_cents: 5 },
+      ]),
+    ).toBe('name,amount_cents,amount_rands\r\n"Check ""Apple"", R180",18000,180.00\r\nPlain,5,0.05\r\n');
+  });
+
+  it("returns an empty string for no rows", () => {
+    expect(toCSV([])).toBe("");
+  });
+});

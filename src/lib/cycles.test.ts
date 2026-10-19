@@ -4,9 +4,12 @@ import {
   cycleBounds,
   cycleStartFor,
   generateCycleItems,
+  newCycleBounds,
   nextCycleStart,
   occurrencesInCycle,
   plannedTotal,
+  proposeCycleForToday,
+  proposeNextCycle,
 } from "./cycles";
 
 function item(overrides: Partial<RecurringItem>): RecurringItem {
@@ -220,5 +223,46 @@ describe("generateCycleItems", () => {
     expect(plannedTotal(generateCycleItems(items, "2026-10-23", "2026-11-22"))).toBe(
       10000 + 10000 + 136200 + 10000,
     );
+  });
+});
+
+describe("proposing a new cycle", () => {
+  const nov = { start_date: "2026-10-23", end_date: "2026-11-22" };
+  const dec = { start_date: "2026-11-23", end_date: "2026-12-22" };
+
+  it("offers the cycle containing today when none covers it", () => {
+    expect(proposeCycleForToday("2027-01-05", 23, [nov, dec])).toEqual({
+      start_date: "2026-12-23",
+      end_date: "2027-01-22",
+      name: "January 2027",
+    });
+    expect(proposeCycleForToday("2026-10-17", 23, [nov, dec])).toEqual({
+      start_date: "2026-09-23",
+      end_date: "2026-10-22",
+      name: "October 2026",
+    });
+  });
+
+  it("returns null if today is already covered", () => {
+    expect(proposeCycleForToday("2026-11-01", 23, [nov])).toBeNull();
+  });
+
+  it("starts after the latest cycle", () => {
+    expect(proposeNextCycle("2026-10-19", 23, [nov, dec])).toMatchObject({ start_date: "2026-12-23", name: "January 2027" });
+    expect(proposeNextCycle("2026-10-19", 23, [])).toMatchObject({ start_date: "2026-09-23" });
+  });
+
+  it("gets back on schedule after the start day changes", () => {
+    expect(proposeNextCycle("2026-10-19", 1, [nov])).toEqual({
+      start_date: "2026-11-23",
+      end_date: "2026-11-30",
+      name: "November 2026",
+    });
+  });
+
+  it("shortens a new cycle so it never overlaps the next one", () => {
+    expect(newCycleBounds("2026-09-23", 23, [{ start_date: "2026-10-15", end_date: "2026-11-14" }])).toMatchObject({
+      end_date: "2026-10-14",
+    });
   });
 });

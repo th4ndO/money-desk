@@ -1,4 +1,6 @@
-import type { RecurringItem } from "./cycles";
+import type { Backup } from "./backup";
+import { type RecurringItem, cycleBounds, generateCycleItems } from "./cycles";
+import type { ISODate } from "./dates";
 
 /**
  * Starting data for my own account, loaded once from Settings (Phase 2).
@@ -87,4 +89,58 @@ export const SEED_TODOS = [
 /** Seed items as RecurringItem, with stable fake ids, for tests and previews. */
 export function seedAsRecurringItems(): RecurringItem[] {
   return SEED_RECURRING.map((item, i) => ({ ...item, id: `seed-${i}`, sort_order: i }));
+}
+
+/**
+ * The whole starting dataset as a backup, so loading it goes through the
+ * same validated, all-or-nothing import as restoring a real backup.
+ */
+export function buildSeedBackup(today: ISODate, newId: () => string = () => crypto.randomUUID()): Backup {
+  const recurring = SEED_RECURRING.map((item, i) => ({
+    ...item,
+    id: newId(),
+    notes: null,
+    sort_order: i,
+  }));
+
+  const cycles: Backup["cycles"] = [];
+  const cycleItems: Backup["cycle_items"] = [];
+  for (const seed of SEED_CYCLES) {
+    const b = cycleBounds(seed.start_date, SEED_SETTINGS.cycle_start_day);
+    const cycleId = newId();
+    cycles.push({ id: cycleId, name: b.name, start_date: b.start_date, end_date: b.end_date, pocket_cents: seed.pocket_cents, closed_at: null, notes: null });
+    generateCycleItems(recurring, b.start_date, b.end_date).forEach((item, i) => {
+      const paid =
+        item.kind === "saving" ||
+        (seed.paidRule === "due-by-today" && item.kind === "bill" && item.due_date !== null && item.due_date <= today);
+      cycleItems.push({
+        id: newId(),
+        cycle_id: cycleId,
+        recurring_item_id: item.recurring_item_id,
+        name: item.name,
+        kind: item.kind,
+        category: item.category,
+        planned_cents: item.planned_cents,
+        due_date: item.due_date,
+        paid,
+        paid_on: paid ? (item.due_date && item.due_date <= today ? item.due_date : today) : null,
+        actual_cents: paid ? item.planned_cents : null,
+        sort_order: i,
+      });
+    });
+  }
+
+  return {
+    app: "money-desk",
+    version: 1,
+    exported_at: new Date().toISOString(),
+    settings: { cycle_start_day: SEED_SETTINGS.cycle_start_day, bank_balance_cents: null, bank_balance_on: null },
+    recurring_items: recurring,
+    cycles,
+    cycle_items: cycleItems,
+    transactions: [],
+    income: [],
+    reserves: SEED_RESERVES.map((r, i) => ({ ...r, id: newId(), notes: null, sort_order: i })),
+    todos: SEED_TODOS.map((text, i) => ({ id: newId(), text, done: false, due_date: null, sort_order: i })),
+  };
 }
