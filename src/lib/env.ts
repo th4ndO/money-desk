@@ -25,3 +25,8 @@ export function allowedEmail(): string {
 export function isAllowedEmail(email: string | null | undefined): boolean {
   return !!email && email.trim().toLowerCase() === allowedEmail();
 }
+
+/** Server only. Secret mixed into the PIN; see lib/pin.ts. */
+export function pinPepper(): string {
+  return required("PIN_PEPPER", process.env.PIN_PEPPER);
+}

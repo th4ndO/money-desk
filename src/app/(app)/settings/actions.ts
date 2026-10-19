@@ -7,6 +7,8 @@ import { requireUser } from "@/lib/auth";
 import { backupCounts, parseBackup } from "@/lib/backup";
 import { getSettings } from "@/lib/data";
 import { todayJHB } from "@/lib/dates";
+import { pinPepper } from "@/lib/env";
+import { PIN_RE, pinToPassword } from "@/lib/pin";
 import { buildSeedBackup } from "@/lib/seed-data";
 
 export async function saveStartDay(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
@@ -52,4 +54,15 @@ export async function importBackup(_prev: ActionResult | null, fd: FormData): Pr
   refresh();
   const c = backupCounts(parsed.backup);
   return ok(`Restored ${c.cycles} cycles, ${c.transactions} spends, ${c.income} income entries`);
+}
+
+export async function changePin(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const pin = String(fd.get("pin") ?? "").trim();
+  const again = String(fd.get("pin_again") ?? "").trim();
+  if (!PIN_RE.test(pin)) return fail("Use 4 to 8 digits.");
+  if (pin !== again) return fail("The two PINs don't match.");
+  const { supabase } = await requireUser();
+  const { error } = await supabase.auth.updateUser({ password: pinToPassword(pin, pinPepper()) });
+  if (error) return fail(NETWORK_FAIL);
+  return ok("PIN changed. Use the new one next time you sign in.");
 }

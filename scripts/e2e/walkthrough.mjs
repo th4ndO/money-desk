@@ -50,6 +50,13 @@ check("signed-out export is refused", exp.status() === 307 || exp.status() === 4
 await noSideScroll("login");
 await shot("01-login");
 
+// 1b. PIN sign-in: a wrong PIN is refused and counted
+await page.getByLabel("PIN").fill("1111");
+await page.getByRole("button", { name: "Unlock" }).click();
+await page.getByText("Wrong PIN. 4 tries left").waitFor({ timeout: 8000 });
+check("a wrong PIN is refused, with tries left", true);
+check("email link is offered as a fallback", (await page.getByRole("button", { name: /Email me a sign-in link/ }).count()) === 1);
+
 // 2. Wrong account gets signed out
 await ctx.addCookies([sessionCookie("intruder@test", "33333333-3333-4333-8333-333333333333")]);
 await page.goto(BASE + "/");
@@ -225,6 +232,17 @@ await page.goto(BASE + "/settings");
 await page.getByRole("button", { name: "Sign out" }).click();
 await page.waitForURL(/\/login$/);
 check("sign out goes to /login", true);
+
+// 15b. Sign back in with the PIN
+await page.getByLabel("PIN").fill("2471");
+await page.getByRole("button", { name: "Unlock" }).click();
+await page.waitForURL(BASE + "/", { timeout: 10000 });
+check("PIN 2471 signs in and opens Today", (await page.textContent("main")).includes("Left in pocket"));
+await page.goto(BASE + "/settings");
+await page.getByLabel("New PIN").fill("8642");
+await page.getByLabel("Same again").fill("8642");
+await page.getByRole("button", { name: "Change PIN" }).click();
+check("changing the PIN confirms", await toast("PIN changed"));
 
 // Dark mode + desktop look
 const dark = await browser.newContext({ viewport: { width: 375, height: 800 }, colorScheme: "dark" });

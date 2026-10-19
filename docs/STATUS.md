@@ -6,10 +6,12 @@
   deploys automatically from `main`). This project was previously `house-sookoo-data-tracker`.
 - Database: Supabase project `money-desk` (`whvmbftpbrqkygnltvvz`, eu-west-2), reused from the
   empty `network-growth` project. All migrations in `supabase/migrations` applied; RLS test passes.
-- Auth: public sign-ups off; one user (ALLOWED_EMAIL). Email holds a link and a 6-digit code.
+- Sign-in: PIN (4–8 digits). The Supabase password is HMAC(PIN_PEPPER, PIN), so the PIN can't be
+  guessed against Supabase directly; the form allows 5 wrong tries per 15 minutes and 20 per day
+  (`pin_lock`). Fallback: email link/code. Public sign-ups off; one user (ALLOWED_EMAIL).
   Site URL and redirect allow-list: the Vercel URL and `http://localhost:3000`.
 - Vercel env (Production, Preview, Development): `NEXT_PUBLIC_SUPABASE_URL`,
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ALLOWED_EMAIL`. No service-role key anywhere.
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ALLOWED_EMAIL`, `PIN_PEPPER` (sensitive). No service-role key anywhere.
 
 ## Verified in production
 

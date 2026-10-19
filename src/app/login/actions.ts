@@ -3,7 +3,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { isAllowedEmail } from "@/lib/env";
+import { allowedEmail, isAllowedEmail, pinPepper } from "@/lib/env";
+import { PIN_RE, pinToPassword } from "@/lib/pin";
 import { createClient } from "@/lib/supabase/server";
 
 export type LoginState =
@@ -70,5 +71,43 @@ export async function verifyCode(_prev: LoginState, formData: FormData): Promise
     type: "email",
   });
   if (error) return wrong;
+  redirect("/");
+}
+
+export type PinState = { error?: string };
+
+/**
+ * Sign in with the PIN. Every attempt goes through the lockout in the
+ * database first, so the PIN can't be guessed by trying them all.
+ */
+export async function pinSignIn(_prev: PinState, formData: FormData): Promise<PinState> {
+  const pin = String(formData.get("pin") ?? "").trim();
+  if (!PIN_RE.test(pin)) return { error: "Enter your PIN: 4 to 8 digits." };
+
+  const supabase = await createClient();
+  const { data: wait, error: waitError } = await supabase.rpc("pin_wait_seconds");
+  if (waitError) return { error: "Couldn't check your PIN. Check your connection and try again." };
+  if ((wait ?? 0) > 0) {
+    const minutes = Math.ceil((wait as number) / 60);
+    return {
+      error: `Too many wrong PINs. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}, or use the email link below.`,
+    };
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: allowedEmail(),
+    password: pinToPassword(pin, pinPepper()),
+  });
+  if (error) {
+    const { data: left } = await supabase.rpc("pin_record", { p_success: false });
+    if (error.status === 429) return { error: "Too many attempts. Wait a few minutes and try again." };
+    return {
+      error:
+        typeof left === "number" && left > 0
+          ? `Wrong PIN. ${left} ${left === 1 ? "try" : "tries"} left before a 15-minute lock.`
+          : "Wrong PIN. PIN sign-in is locked for 15 minutes; use the email link below.",
+    };
+  }
+  await supabase.rpc("pin_record", { p_success: true });
   redirect("/");
 }

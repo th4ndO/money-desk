@@ -5,7 +5,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { SubmitButton } from "@/components/SubmitButton";
 import { useToast } from "@/components/Toast";
 import { type Backup, backupCounts, parseBackup } from "@/lib/backup";
-import { importBackup, loadStartingData, saveStartDay } from "./actions";
+import { changePin, importBackup, loadStartingData, saveStartDay } from "./actions";
 
 export function StartDayForm({ day }: { day: number }) {
   return (
@@ -91,6 +91,22 @@ export function ImportForm() {
           <SubmitButton className="btn btn-primary" pending="Importing…">Replace my data with this backup</SubmitButton>
         </>
       )}
+    </ActionForm>
+  );
+}
+
+export function ChangePinForm() {
+  return (
+    <ActionForm action={changePin} resetOnSuccess className="grid grid-cols-2 gap-3">
+      <div className="space-y-1.5">
+        <label htmlFor="new-pin" className="label">New PIN</label>
+        <input id="new-pin" name="pin" type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="new-password" minLength={4} maxLength={8} required className="input money" />
+      </div>
+      <div className="space-y-1.5">
+        <label htmlFor="new-pin-again" className="label">Same again</label>
+        <input id="new-pin-again" name="pin_again" type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="new-password" minLength={4} maxLength={8} required className="input money" />
+      </div>
+      <SubmitButton className="btn btn-secondary col-span-2" pending="Saving…">Change PIN</SubmitButton>
     </ActionForm>
   );
 }

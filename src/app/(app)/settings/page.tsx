@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { requireUser } from "@/lib/auth";
 import { BACKUP_TABLES } from "@/lib/backup";
 import { getSettings } from "@/lib/data";
-import { ImportForm, LoadStartingData, StartDayForm } from "./forms";
+import { ChangePinForm, ImportForm, LoadStartingData, StartDayForm } from "./forms";
 
 export const metadata = { title: "Settings" };
 
@@ -67,6 +67,15 @@ export default async function SettingsPage() {
       <section className="card space-y-3" aria-labelledby="import-title">
         <h2 id="import-title" className="font-semibold">Restore from a backup</h2>
         <ImportForm />
+      </section>
+
+      <section className="card space-y-3" aria-labelledby="pin-title">
+        <h2 id="pin-title" className="font-semibold">PIN</h2>
+        <p className="text-sm text-muted">
+          Your phone stays signed in. You only need the PIN on a new device or after signing out. Five wrong tries
+          lock PIN sign-in for 15 minutes; the email link still works.
+        </p>
+        <ChangePinForm />
       </section>
 
       <form action={signOut}>

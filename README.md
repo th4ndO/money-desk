@@ -30,7 +30,8 @@ Migrations are in `supabase/migrations`, applied in filename order.
 
 ## Sign-in
 
-Email link or 6-digit code, for `ALLOWED_EMAIL` only. Three layers:
+A PIN (changeable in Settings), with an email link as fallback, for `ALLOWED_EMAIL` only. Five wrong
+PINs lock PIN sign-in for 15 minutes. Three layers:
 
 1. Supabase Auth has public sign-ups turned off; the one user is invited.
 2. `src/proxy.ts` and `/auth/confirm` sign out any session whose email isn't `ALLOWED_EMAIL`.

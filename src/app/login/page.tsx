@@ -15,7 +15,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center px-4 py-12">
       <h1 className="text-2xl font-semibold tracking-tight">Money Desk</h1>
-      <p className="mt-1 mb-8 text-muted">Sign in to see your cycle.</p>
+      <p className="mt-1 mb-8 text-muted">Enter your PIN to open your money.</p>
       <LoginForm notice={notice} />
     </main>
   );
