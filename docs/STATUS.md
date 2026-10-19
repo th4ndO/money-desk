@@ -1,25 +1,25 @@
-# Status (handover note)
+# Status
 
-## Done
+## Live
 
-- **Phase 1**: schema, RLS, sign-in (link or code, ALLOWED_EMAIL only), money/date/cycle logic.
-- **Phase 2**: dashboard, cycles, cycle detail, recurring, start cycle, tick bills, log spending, starting data.
-- **Phase 3**: income and runway, reserves, to-dos, close/reopen with review, JSON/CSV export, JSON restore.
-- 105 unit tests; `scripts/e2e` browser walkthrough passes 48/48 against a local stack.
+- Site: https://thendo-money-desk.vercel.app (Vercel project `money-desk`, Hobby plan,
+  deploys automatically from `main`). This project was previously `house-sookoo-data-tracker`.
+- Database: Supabase project `money-desk` (`whvmbftpbrqkygnltvvz`, eu-west-2), reused from the
+  empty `network-growth` project. All migrations in `supabase/migrations` applied; RLS test passes.
+- Auth: public sign-ups off; one user (ALLOWED_EMAIL). Email holds a link and a 6-digit code.
+  Site URL and redirect allow-list: the Vercel URL and `http://localhost:3000`.
+- Vercel env (Production, Preview, Development): `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ALLOWED_EMAIL`. No service-role key anywhere.
 
-## Not done: needs the owner
+## Verified in production
 
-1. Supabase project `money-desk` in the **free** organisation "Personal" (`pwqmqwfkzacmyrxipdai`).
-   No charges: do not create it in the Pro organisation.
-2. A session whose Supabase connector can reach that organisation.
+- Signed-out requests to every page and to `/export/json` redirect to `/login`.
+- A forged session cookie is rejected.
+- The anon key alone gets HTTP 401 from every table (`npm run check:anon`).
+- `robots.txt` disallows everything; pages send `noindex` (meta and `X-Robots-Tag`).
 
-## Next steps for whoever picks this up (Phase 4)
+## Notes
 
-1. Apply `supabase/migrations/*.sql` in order; run `supabase/tests/rls.sql` (expect `RLS OK`).
-2. Auth settings: disable sign-ups, invite the owner's email, Site URL = the Vercel URL, redirect URLs =
-   Vercel URL + `http://localhost:3000`. Magic link email template:
-   link `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email` plus the code `{{ .Token }}`.
-3. Vercel (Hobby, free): import `th4ndo/money-desk`; env vars `NEXT_PUBLIC_SUPABASE_URL`,
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ALLOWED_EMAIL` for Production and Preview.
-4. Verify in production: login, incognito sees nothing, `npm run check:anon`, `robots.txt`.
-5. Owner signs in, Settings → "Load my starting data".
+- Supabase's built-in email sender allows only a few sign-in emails per hour. If you hit the
+  limit, wait an hour or add your own SMTP in Supabase → Authentication → Emails.
+- Applying a future migration: paste the new file into Supabase → SQL editor, or ask Claude.

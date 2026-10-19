@@ -43,4 +43,9 @@ Email link or 6-digit code, for `ALLOWED_EMAIL` only. Three layers:
 - **Back up:** Settings → "Download full backup (JSON)". Restore it in Settings (replaces everything).
 - **First run:** Settings → "Load my starting data" (only while the account is empty).
 
-Deployment steps are in `docs/STATUS.md` until Phase 4 is done.
+## Deploy
+
+Live at https://thendo-money-desk.vercel.app. Every push to `main` deploys on Vercel. Set the three
+variables from `.env.example` in Vercel (Production and Preview). In Supabase → Authentication →
+URL configuration, the Site URL and redirect URLs must include the Vercel address. Details of the
+current setup are in `docs/STATUS.md`.
