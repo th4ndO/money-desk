@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readyToAllocate } from "./allocation";
 import type { RecurringItem } from "./cycles";
 import type { ISODate } from "./dates";
 import type { CycleItemRow, CycleRow, RecurringItemRow, SettingsRow, TransactionRow } from "./types";
@@ -101,4 +102,15 @@ export async function cycleIsOpen(supabase: DB, cycleId: string): Promise<boolea
   const { data, error } = await supabase.from("cycles").select("closed_at").eq("id", cycleId).maybeSingle();
   if (error || !data) return null;
   return data.closed_at === null;
+}
+
+/** Total income minus everything allocated: money still waiting for a job. */
+export async function getReadyToAllocate(supabase: DB): Promise<number> {
+  const [income, allocations] = await Promise.all([
+    supabase.from("income").select("amount_cents"),
+    supabase.from("allocations").select("amount_cents"),
+  ]);
+  if (income.error) throw income.error;
+  if (allocations.error) throw allocations.error;
+  return readyToAllocate(income.data, allocations.data);
 }

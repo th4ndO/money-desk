@@ -2,12 +2,13 @@ import { Money } from "@/components/Money";
 import { PageHeader } from "@/components/PageHeader";
 import { requireUser } from "@/lib/auth";
 import { cycleStartFor } from "@/lib/cycles";
-import { asRecurringItems, getCycleBundle, getCycleCovering, getCycles, getItemsAndTransactions, getRecurring, getSettings } from "@/lib/data";
+import { asRecurringItems, getCycleBundle, getCycleCovering, getCycles, getItemsAndTransactions, getReadyToAllocate, getRecurring, getSettings } from "@/lib/data";
 import { addDays, formatDate, formatShortDate, monthName, parseISODate, todayJHB } from "@/lib/dates";
 import { computeRunway } from "@/lib/runway";
 import { summariseCycle } from "@/lib/summary";
 import type { IncomeRow } from "@/lib/types";
-import { BalanceForm, DeleteIncome, IncomeForm } from "./forms";
+import Link from "next/link";
+import { BalanceForm, DeleteIncome, IncomeForm, UndoAllocation } from "./forms";
 
 export const metadata = { title: "Income" };
 
@@ -20,8 +21,21 @@ export default async function IncomePage() {
     getCycles(supabase),
     getCycleCovering(supabase, today),
     supabase.from("income").select("id, amount_cents, date, source, notes").order("date", { ascending: false }).limit(200),
-    supabase.from("reserves").select("balance_cents, spendable"),
+    supabase.from("reserves").select("id, name, balance_cents, spendable"),
   ]);
+  const [ready, allocRes, itemNames] = await Promise.all([
+    getReadyToAllocate(supabase),
+    supabase.from("allocations").select("id, cycle_item_id, reserve_id, amount_cents, date, note").order("date", { ascending: false }).order("created_at", { ascending: false }).limit(50),
+    supabase.from("cycle_items").select("id, name, cycles(name)"),
+  ]);
+  const allocations = allocRes.data ?? [];
+  const itemLabel = new Map(
+    (itemNames.data ?? []).map((i) => {
+      const cyc = i.cycles as unknown as { name: string } | null;
+      return [i.id as string, `${i.name}${cyc ? ` · ${cyc.name}` : ""}`];
+    }),
+  );
+  const potLabel = new Map((reservesRes.data ?? []).map((r) => [r.id as string, `${r.name} (reserve)`]));
   const income = (incomeRes.data ?? []) as IncomeRow[];
   const spendableReserves = (reservesRes.data ?? []).filter((r) => r.spendable).reduce((s, r) => s + r.balance_cents, 0);
 
@@ -70,6 +84,14 @@ export default async function IncomePage() {
   return (
     <div className="space-y-8">
       <PageHeader title="Income" subtitle="What came in, and how long it lasts." />
+
+      <section className="card flex flex-wrap items-center justify-between gap-3" aria-labelledby="ready-title">
+        <div>
+          <p id="ready-title" className="text-sm text-muted">Ready to allocate</p>
+          <p className="text-3xl font-semibold tracking-tight"><Money cents={ready} signed /></p>
+        </div>
+        <Link href="/allocate" className="btn btn-primary">Allocate</Link>
+      </section>
 
       <section className="card space-y-4" aria-labelledby="runway-title">
         <h2 id="runway-title" className="section-title">Runway</h2>
@@ -125,6 +147,28 @@ export default async function IncomePage() {
       <section className="card" aria-labelledby="log-income-title">
         <h2 id="log-income-title" className="section-title mb-3">Record income</h2>
         <IncomeForm today={today} />
+      </section>
+
+      <section aria-labelledby="alloc-title">
+        <h2 id="alloc-title" className="section-title mb-2">Allocations</h2>
+        {allocations.length === 0 ? (
+          <p className="text-muted">Nothing allocated yet.</p>
+        ) : (
+          <ul>
+            {allocations.map((a) => (
+              <li key={a.id} className="row">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">
+                    {a.cycle_item_id ? itemLabel.get(a.cycle_item_id) : potLabel.get(a.reserve_id as string)}
+                  </p>
+                  <p className="text-sm text-muted">{formatShortDate(a.date)}{a.note ? ` · ${a.note}` : ""}</p>
+                </div>
+                <Money cents={a.amount_cents} />
+                <UndoAllocation id={a.id} />
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section aria-labelledby="history-title">

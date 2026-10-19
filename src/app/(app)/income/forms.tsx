@@ -4,6 +4,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { SubmitButton } from "@/components/SubmitButton";
 import { centsToInput } from "@/lib/money";
 import type { IncomeRow } from "@/lib/types";
+import { undoAllocation } from "../allocate/actions";
 import { deleteIncome, logIncome, setBalance, updateIncome } from "./actions";
 
 export function BalanceForm({ balance, on, today }: { balance: number | null; on: string | null; today: string }) {
@@ -53,6 +54,15 @@ export function DeleteIncome({ id }: { id: string }) {
     <ActionForm action={deleteIncome} confirm="Delete this income entry?">
       <input type="hidden" name="id" value={id} />
       <SubmitButton className="btn btn-danger btn-sm px-0">Delete</SubmitButton>
+    </ActionForm>
+  );
+}
+
+export function UndoAllocation({ id }: { id: string }) {
+  return (
+    <ActionForm action={undoAllocation} confirm="Undo this allocation? The money goes back to Ready to allocate.">
+      <input type="hidden" name="id" value={id} />
+      <SubmitButton className="btn btn-quiet btn-sm">Undo</SubmitButton>
     </ActionForm>
   );
 }

@@ -7,7 +7,7 @@ export async function fetchBackup(supabase: SupabaseClient): Promise<Backup> {
   const q = (table: string, cols: string, order = "created_at") =>
     supabase.from(table).select(cols).order(order).order("id").limit(100000);
 
-  const [settings, recurring, cycles, items, txs, income, reserves, todos] = await Promise.all([
+  const [settings, recurring, cycles, items, txs, income, reserves, todos, allocations] = await Promise.all([
     supabase.from("settings").select("cycle_start_day, bank_balance_cents, bank_balance_on").maybeSingle(),
     q("recurring_items", "id, name, kind, amount_cents, due_day, frequency, interval_months, starts_on, ends_on, category, notes, active, sort_order", "sort_order"),
     q("cycles", "id, name, start_date, end_date, pocket_cents, closed_at, notes", "start_date"),
@@ -16,8 +16,9 @@ export async function fetchBackup(supabase: SupabaseClient): Promise<Backup> {
     q("income", "id, amount_cents, date, source, notes", "date"),
     q("reserves", "id, name, balance_cents, spendable, notes, sort_order", "sort_order"),
     q("todos", "id, text, done, due_date, sort_order", "sort_order"),
+    q("allocations", "id, cycle_item_id, reserve_id, amount_cents, date, note", "date"),
   ]);
-  for (const r of [settings, recurring, cycles, items, txs, income, reserves, todos]) {
+  for (const r of [settings, recurring, cycles, items, txs, income, reserves, todos, allocations]) {
     if (r.error) throw r.error;
   }
 
@@ -33,5 +34,6 @@ export async function fetchBackup(supabase: SupabaseClient): Promise<Backup> {
     income: income.data as unknown as Backup["income"],
     reserves: reserves.data as unknown as Backup["reserves"],
     todos: todos.data as unknown as Backup["todos"],
+    allocations: allocations.data as unknown as Backup["allocations"],
   };
 }

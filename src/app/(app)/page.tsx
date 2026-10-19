@@ -7,7 +7,7 @@ import { Pill } from "@/components/Pill";
 import { StartCycleButton } from "@/components/StartCycleButton";
 import { requireUser } from "@/lib/auth";
 import { generateCycleItems, plannedTotal, proposeCycleForToday } from "@/lib/cycles";
-import { asRecurringItems, getCycleBundle, getCycleCovering, getRecurring, getSettings } from "@/lib/data";
+import { asRecurringItems, getCycleBundle, getCycleCovering, getReadyToAllocate, getRecurring, getSettings } from "@/lib/data";
 import { formatDate, formatShortDate, todayJHB } from "@/lib/dates";
 import { healthTone, summariseCycle } from "@/lib/summary";
 
@@ -20,7 +20,7 @@ export default async function Dashboard() {
 
   if (!current) return <NoCycle today={today} />;
 
-  const bundle = await getCycleBundle(supabase, current.id);
+  const [bundle, ready] = await Promise.all([getCycleBundle(supabase, current.id), getReadyToAllocate(supabase)]);
   if (!bundle) return <NoCycle today={today} />;
   const { cycle, items, transactions } = bundle;
   const s = summariseCycle(cycle, items, transactions, today);
@@ -47,6 +47,16 @@ export default async function Dashboard() {
           <Money cents={s.spent} /> spent of <Money cents={s.pocket} />
         </p>
       </section>
+
+      {ready !== 0 && (
+        <Link href={`/allocate?cycle=${cycle.id}`} className={`card flex items-center justify-between gap-3 ${ready < 0 ? "border-bad" : "border-accent"}`}>
+          <span>
+            <span className="block text-sm text-muted">{ready > 0 ? "Ready to allocate" : "Allocated more than recorded income"}</span>
+            <Money cents={ready} signed className="text-xl font-semibold" />
+          </span>
+          <span className="btn btn-primary btn-sm">{ready > 0 ? "Allocate" : "Review"}</span>
+        </Link>
+      )}
 
       <section className="grid grid-cols-2 gap-3">
         <div className="card">
@@ -82,8 +92,11 @@ export default async function Dashboard() {
       </section>
 
       <section aria-labelledby="env-title">
-        <h2 id="env-title" className="section-title mb-3">Envelopes</h2>
-        <EnvelopeBars envelopes={s.envelopes} />
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 id="env-title" className="section-title">Envelopes</h2>
+          <span className="text-sm text-muted">Tap one to spend from it</span>
+        </div>
+        <EnvelopeBars envelopes={s.envelopes} cycleId={cycle.id} readOnly={closed} />
         {s.unplannedSpent > 0 && (
           <p className="mt-3 text-sm text-muted">
             Plus <Money cents={s.unplannedSpent} /> unplanned

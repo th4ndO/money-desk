@@ -142,5 +142,6 @@ export function buildSeedBackup(today: ISODate, newId: () => string = () => cryp
     income: [],
     reserves: SEED_RESERVES.map((r, i) => ({ ...r, id: newId(), notes: null, sort_order: i })),
     todos: SEED_TODOS.map((text, i) => ({ id: newId(), text, done: false, due_date: null, sort_order: i })),
+    allocations: [],
   };
 }

@@ -31,6 +31,8 @@ insert into public.transactions (cycle_id, cycle_item_id, amount_cents, date)
 insert into public.income (amount_cents, date, source) values (500000, '2026-10-20', 'Client invoice');
 insert into public.reserves (name, balance_cents) values ('Savings', 200000);
 insert into public.todos (text) values ('Claim UIF');
+insert into public.allocations (reserve_id, amount_cents)
+  select id, 100 from public.reserves limit 1;
 
 do $$
 declare
@@ -38,7 +40,7 @@ declare
   n bigint;
 begin
   foreach t in array array['settings','recurring_items','cycles','cycle_items',
-                           'transactions','income','reserves','todos'] loop
+                           'transactions','income','reserves','todos','allocations'] loop
     execute format('select count(*) from public.%I', t) into n;
     if n <> 1 then raise exception 'owner should see 1 row in %, saw %', t, n; end if;
   end loop;
@@ -54,7 +56,7 @@ declare
   n bigint;
 begin
   foreach t in array array['settings','recurring_items','cycles','cycle_items',
-                           'transactions','income','reserves','todos'] loop
+                           'transactions','income','reserves','todos','allocations'] loop
     execute format('select count(*) from public.%I', t) into n;
     if n <> 0 then raise exception 'other user can see % row(s) in %', n, t; end if;
 
@@ -93,7 +95,7 @@ declare
   n bigint;
 begin
   foreach t in array array['settings','recurring_items','cycles','cycle_items',
-                           'transactions','income','reserves','todos'] loop
+                           'transactions','income','reserves','todos','allocations'] loop
     begin
       execute format('select count(*) from public.%I', t) into n;
       if n <> 0 then raise exception 'anonymous can see % row(s) in %', n, t; end if;

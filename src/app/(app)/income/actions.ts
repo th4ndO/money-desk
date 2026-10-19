@@ -26,7 +26,7 @@ export async function logIncome(_prev: ActionResult | null, fd: FormData): Promi
   });
   if (error) return fail(NETWORK_FAIL);
   refresh();
-  return ok(`Recorded ${formatZAR(parsed.data.amount)} from ${parsed.data.source}`);
+  return ok(`Recorded ${formatZAR(parsed.data.amount)} from ${parsed.data.source}. Allocate it from the card above.`);
 }
 
 export async function updateIncome(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {

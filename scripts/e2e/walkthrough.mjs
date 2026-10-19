@@ -142,6 +142,46 @@ main = await page.textContent("main");
 check("reserves total R6 737", main.includes("R6 737"));
 await noSideScroll("reserves");
 
+// 11b. Allocate income: R500 to Personal (this cycle) and R2 000 to the Savings pot
+await page.goto(BASE + "/allocate");
+main = await page.textContent("main");
+check("allocate page shows R8 500 ready", main.includes("R8\u00a0500"));
+await page.getByRole("textbox", { name: "Personal" }).fill("500");
+await page.locator("section", { has: page.getByRole("heading", { name: "Reserves" }) }).getByRole("textbox", { name: "Savings" }).fill("2000");
+check("running total shows R6 000 left", (await page.textContent("main")).includes("R6\u00a0000"));
+await noSideScroll("allocate");
+await shot("11-allocate");
+await page.getByRole("button", { name: /^Allocate R2/ }).click();
+check("allocating says what is left", await toast("Allocated R2\u00a0500. R6\u00a0000 left to allocate."));
+
+await page.goto(BASE + "/");
+main = await page.textContent("main");
+check("dashboard shows R6 000 ready to allocate", main.includes("Ready to allocate") && main.includes("R6\u00a0000"));
+check("Personal now has R1 500 allocated", main.includes("R1\u00a0500 allocated"));
+check("pocket grew by R500: R3 712 left", main.includes("R3\u00a0712"));
+
+// Spend straight from the Personal envelope
+const personal = page.locator("details", { has: page.locator("summary", { hasText: "Personal" }) });
+await personal.locator("summary").click();
+await personal.getByLabel("Spent (R)").fill("250");
+await personal.getByRole("button", { name: "Take from Personal" }).click();
+check("spending from Personal logs to Personal", await toast("Logged R250 to Personal"));
+await page.getByText("R1\u00a0250").first().waitFor({ timeout: 8000 });
+check("Personal shows R1 250 left", true);
+await shot("12-dashboard-after-allocation");
+
+// Undo the Savings allocation
+await page.goto(BASE + "/reserves");
+check("Savings pot went up to R4 000", (await page.textContent("main")).includes("R4\u00a0000"));
+await page.goto(BASE + "/income");
+page.once("dialog", (d) => d.accept());
+await page.locator("li", { hasText: "Savings (reserve)" }).getByRole("button", { name: "Undo" }).click();
+check("undo puts the money back", await toast("Undone"));
+await page.getByText("R8\u00a0000").first().waitFor({ timeout: 8000 });
+check("ready to allocate back to R8 000", true);
+await page.goto(BASE + "/reserves");
+check("Savings pot back to R2 000", (await page.textContent("main")).includes("R2\u00a0000"));
+
 // 12. Todos
 await page.goto(BASE + "/todos");
 await page.getByRole("checkbox", { name: /Claim UIF.*not done/ }).click();
@@ -154,14 +194,14 @@ const [download] = await Promise.all([page.waitForEvent("download"), page.getByR
 const file = `${SHOTS}/backup.json`;
 await download.saveAs(file);
 const backup = JSON.parse(fs.readFileSync(file, "utf8"));
-check("export holds 4 cycles, 1 spend, 1 income", backup.cycles.length === 4 && backup.transactions.length === 1 && backup.income.length === 1);
+check("export holds 4 cycles, 2 spends, 1 income, 1 allocation", backup.cycles.length === 4 && backup.transactions.length === 2 && backup.income.length === 1 && backup.allocations.length === 1);
 const csv = await page.request.get(BASE + "/export/csv/transactions");
 check("CSV export works", csv.ok() && (await csv.text()).includes("amount_rands"));
 await page.setInputFiles("#backup-file", file);
 await page.getByText("Importing replaces everything").waitFor();
 await page.getByLabel("Type REPLACE to confirm").fill("REPLACE");
 await page.getByRole("button", { name: "Replace my data with this backup" }).click();
-check("restore from JSON works", await toast("Restored 4 cycles, 1 spends, 1 income entries"));
+check("restore from JSON works", await toast("Restored 4 cycles, 2 spends, 1 income entries"));
 await noSideScroll("settings");
 await shot("07-settings");
 

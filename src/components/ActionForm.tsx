@@ -27,13 +27,18 @@ export function ActionForm({
   confirm?: string;
   onSuccess?: () => void;
 } & Omit<React.FormHTMLAttributes<HTMLFormElement>, "action" | "onSubmit">) {
-  const [state, formAction] = useActionState(action, null);
   const toast = useToast();
+  // Show the result as soon as the server answers. Doing it in an effect
+  // would miss it when a successful delete removes this very form.
+  const [state, formAction] = useActionState(async (prev: ActionResult | null, fd: FormData) => {
+    const result = await action(prev, fd);
+    toast(result);
+    return result;
+  }, null);
   const ref = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (!state) return;
-    toast(state);
     if (state.ok) {
       if (resetOnSuccess) ref.current?.reset();
       onSuccess?.();

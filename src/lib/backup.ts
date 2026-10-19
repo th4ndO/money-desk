@@ -95,6 +95,19 @@ export const backupSchema = z
     todos: z.array(
       z.object({ id: uuid, text: text(300), done: z.boolean(), due_date: date.nullable(), sort_order: z.number().int() }),
     ),
+    // Added after the first release; older backups simply have none.
+    allocations: z
+      .array(
+        z.object({
+          id: uuid,
+          cycle_item_id: uuid.nullable(),
+          reserve_id: uuid.nullable(),
+          amount_cents: positiveCents,
+          date,
+          note: optionalText(200),
+        }),
+      )
+      .default([]),
   })
   .superRefine((b, ctx) => {
     const cycleIds = new Set(b.cycles.map((c) => c.id));
@@ -104,6 +117,11 @@ export const backupSchema = z
       if (!cycleIds.has(i.cycle_id)) ctx.addIssue({ code: "custom", path: ["cycle_items", n], message: "points at a missing cycle" });
       if (i.recurring_item_id && !recurringIds.has(i.recurring_item_id))
         ctx.addIssue({ code: "custom", path: ["cycle_items", n], message: "points at a missing recurring item" });
+    });
+    const reserveIds = new Set(b.reserves.map((r) => r.id));
+    b.allocations.forEach((a, n) => {
+      const ok = a.cycle_item_id ? itemCycle.has(a.cycle_item_id) && !a.reserve_id : !!a.reserve_id && reserveIds.has(a.reserve_id);
+      if (!ok) ctx.addIssue({ code: "custom", path: ["allocations", n], message: "points at a missing item or pot" });
     });
     b.transactions.forEach((t, n) => {
       if (!cycleIds.has(t.cycle_id)) ctx.addIssue({ code: "custom", path: ["transactions", n], message: "points at a missing cycle" });
@@ -122,6 +140,7 @@ export const BACKUP_TABLES = [
   "income",
   "reserves",
   "todos",
+  "allocations",
 ] as const;
 export type BackupTable = (typeof BACKUP_TABLES)[number];
 

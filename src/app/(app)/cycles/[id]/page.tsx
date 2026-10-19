@@ -68,6 +68,11 @@ export default async function CycleDetail({ params }: PageProps<"/cycles/[id]">)
         ))}
       </section>
 
+      {!closed && (
+        <Link href={`/allocate?cycle=${cycle.id}`} className="btn btn-primary w-full">
+          Add money to {cycle.name}
+        </Link>
+      )}
       {!closed && <PocketEditor cycleId={cycle.id} pocket={cycle.pocket_cents} notes={cycle.notes} />}
       {closed && cycle.notes && <p className="text-muted">Notes: {cycle.notes}</p>}
 
@@ -97,7 +102,7 @@ export default async function CycleDetail({ params }: PageProps<"/cycles/[id]">)
 
       <section aria-labelledby="env-title">
         <h2 id="env-title" className="section-title mb-3">Envelopes</h2>
-        <EnvelopeBars envelopes={s.envelopes} />
+        <EnvelopeBars envelopes={s.envelopes} cycleId={cycle.id} readOnly={closed} />
         {!closed && envelopeItems.length > 0 && (
           <details className="mt-3">
             <summary className="text-sm text-muted hover:text-text">Edit envelope amounts</summary>

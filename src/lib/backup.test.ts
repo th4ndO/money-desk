@@ -22,6 +22,7 @@ describe("seed backup", () => {
       income: 0,
       reserves: 2,
       todos: 5,
+      allocations: 0,
     });
   });
 
@@ -79,6 +80,29 @@ describe("parseBackup", () => {
     const bad = structuredClone(good);
     bad.todos[0].due_date = "2027-02-29";
     expect(parseBackup(JSON.stringify(bad)).ok).toBe(false);
+  });
+});
+
+describe("allocations in backups", () => {
+  const good = buildSeedBackup("2026-10-19", fakeId);
+
+  it("accepts older backups without allocations", () => {
+    const old: Record<string, unknown> = structuredClone(good);
+    delete old.allocations;
+    const r = parseBackup(JSON.stringify(old));
+    expect(r.ok && r.backup.allocations).toEqual([]);
+  });
+
+  it("rejects an allocation pointing at nothing", () => {
+    const bad = structuredClone(good);
+    bad.allocations.push({ id: fakeId(), cycle_item_id: fakeId(), reserve_id: null, amount_cents: 100, date: "2026-10-19", note: null });
+    expect(parseBackup(JSON.stringify(bad)).ok).toBe(false);
+  });
+
+  it("accepts an allocation to a real pot", () => {
+    const ok = structuredClone(good);
+    ok.allocations.push({ id: fakeId(), cycle_item_id: null, reserve_id: ok.reserves[0].id, amount_cents: 100, date: "2026-10-19", note: null });
+    expect(parseBackup(JSON.stringify(ok)).ok).toBe(true);
   });
 });
 
