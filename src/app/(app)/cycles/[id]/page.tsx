@@ -68,6 +68,12 @@ export default async function CycleDetail({ params }: PageProps<"/cycles/[id]">)
         ))}
       </section>
 
+      {!closed && s.planned > s.pocket && (
+        <p className="notice text-sm">
+          <Money cents={s.planned - s.pocket} /> of this plan isn&apos;t funded yet.{" "}
+          <Link href={`/allocate?cycle=${cycle.id}`} className="link">Fund it from income</Link>
+        </p>
+      )}
       {!closed && (
         <Link href={`/allocate?cycle=${cycle.id}`} className="btn btn-primary w-full">
           Add money to {cycle.name}

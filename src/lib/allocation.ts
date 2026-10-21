@@ -10,11 +10,18 @@ export function readyToAllocate(
   return sum(income) - sum(allocations);
 }
 
-export type AllocationRow = { cycle_item_id: string; amount_cents: Cents } | { reserve_id: string; amount_cents: Cents };
+export type AllocationRow =
+  | { cycle_item_id: string; amount_cents: Cents }
+  | { reserve_id: string; amount_cents: Cents }
+  | { cycle_id: string; amount_cents: Cents };
+
+const TARGET_FIELD = { item: "cycle_item_id", pot: "reserve_id", fund: "cycle_id" } as const;
 
 /**
  * Read the allocation form: one amount field per target, named
- * "item:<uuid>" or "pot:<uuid>". Blank fields are skipped.
+ * "item:<uuid>" (top up an item and its cycle's pocket), "pot:<uuid>" (a
+ * reserve) or "fund:<uuid>" (a cycle's pocket only, to fund what's already
+ * planned). Blank fields are skipped.
  */
 export function parseAllocationForm(
   entries: Iterable<[string, FormDataEntryValue]>,
@@ -23,13 +30,14 @@ export function parseAllocationForm(
   const rows: AllocationRow[] = [];
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   for (const [key, value] of entries) {
-    const match = /^(item|pot):(.+)$/.exec(key);
+    const match = /^(item|pot|fund):(.+)$/.exec(key);
     if (!match || typeof value !== "string" || value.trim() === "") continue;
     if (!uuid.test(match[2])) return { ok: false, message: "Something went wrong: refresh the page and try again." };
     const cents = parseRandToCents(value);
     if (cents === null) return { ok: false, message: `"${value}" isn't an amount. Use numbers like 500 or 150.50.` };
     if (cents === 0) continue;
-    rows.push(match[1] === "item" ? { cycle_item_id: match[2], amount_cents: cents } : { reserve_id: match[2], amount_cents: cents });
+    const field = TARGET_FIELD[match[1] as keyof typeof TARGET_FIELD];
+    rows.push({ [field]: match[2], amount_cents: cents } as AllocationRow);
   }
   const total = rows.reduce((s, r) => s + r.amount_cents, 0);
   if (rows.length === 0) return { ok: false, message: "Enter an amount next to at least one item." };

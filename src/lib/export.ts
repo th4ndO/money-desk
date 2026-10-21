@@ -16,7 +16,7 @@ export async function fetchBackup(supabase: SupabaseClient): Promise<Backup> {
     q("income", "id, amount_cents, date, source, notes", "date"),
     q("reserves", "id, name, balance_cents, spendable, notes, sort_order", "sort_order"),
     q("todos", "id, text, done, due_date, sort_order", "sort_order"),
-    q("allocations", "id, cycle_item_id, reserve_id, amount_cents, date, note", "date"),
+    q("allocations", "id, cycle_item_id, reserve_id, cycle_id, amount_cents, date, note", "date"),
   ]);
   for (const r of [settings, recurring, cycles, items, txs, income, reserves, todos, allocations]) {
     if (r.error) throw r.error;

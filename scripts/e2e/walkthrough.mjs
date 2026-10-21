@@ -85,7 +85,14 @@ await go("/");
 let main = await page.textContent("main");
 check("dashboard shows the October cycle", main.includes("October 2026"));
 check("left in pocket = R3 362 (bills and savings paid)", main.includes("R3 362"));
-check("safe per day = R3 362 / 4 days = R840.50", main.includes("R840.50"));
+{
+  // Days left in October counting today, in Johannesburg time.
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Johannesburg" }).format(new Date());
+  const daysLeft = Math.round((Date.parse("2026-10-22") - Date.parse(today)) / 86400000) + 1;
+  const cents = Math.floor(336200 / daysLeft);
+  const expected = "R" + Math.floor(cents / 100).toLocaleString("en").replace(/,/g, "\u00a0") + (cents % 100 ? "." + String(cents % 100).padStart(2, "0") : "");
+  check(`safe per day = R3 362 / ${daysLeft} days = ${expected}`, main.includes(expected));
+}
 check("status pill says On track", main.includes("On track"));
 await noSideScroll("dashboard");
 await shot("02-dashboard");
@@ -110,6 +117,7 @@ await page.getByRole("button", { name: "Start January cycle" }).click();
 await page.waitForURL(/\/cycles\/[0-9a-f-]{36}$/, { timeout: 10000 });
 await settled();
 main = await page.textContent("main");
+const janUrl = page.url();
 check("January 2027 cycle created", main.includes("January 2027"));
 check("January runs 23 Dec 2026 – 22 Jan 2027", main.includes("23 Dec 2026") && main.includes("22 Jan 2027"));
 check("gym is in January (30 Dec debit, ends 31 Dec)", main.includes("Gym"));
@@ -199,6 +207,28 @@ check("ready to allocate back to R8 000", true);
 await go("/reserves");
 check("Savings pot back to R2 000", (await page.textContent("main")).includes("R2\u00a0000"));
 
+// 11c. A new R500 envelope makes the plan exceed the pocket; fund it from income
+await go(janUrl.replace(BASE, ""));
+await page.locator("summary", { hasText: "Add a one-off item" }).click();
+await page.getByLabel("Name").last().fill("Profound Productions");
+await page.getByLabel("Type").selectOption("envelope");
+await page.locator("#oneoff-amount").fill("500");
+await page.getByRole("button", { name: "Add to this cycle" }).click();
+check("adding the envelope confirms", await toast("Added Profound Productions"));
+await page.getByText("of this plan isn't funded yet").waitFor({ timeout: 8000 });
+check("cycle says R500 isn't funded", (await page.textContent("main")).includes("R500 of this plan isn't funded yet"));
+await page.getByRole("link", { name: "Fund it from income" }).click();
+await settled();
+await page.getByRole("textbox", { name: "January 2027 plan" }).fill("500");
+await page.getByRole("button", { name: /^Allocate R500/ }).click();
+check("funding the plan confirms", await toast("Allocated R500"));
+await go(janUrl.replace(BASE, ""));
+main = await page.textContent("main");
+check("funded: no more 'isn't funded' prompt", !main.includes("isn't funded yet"));
+check("pocket is now R10 245", main.includes("R10\u00a0245"));
+const pp = page.locator("li", { has: page.locator("summary", { hasText: "Profound Productions" }) });
+check("Profound Productions stays at R500 allocated", (await pp.textContent()).includes("R500 allocated"));
+
 // 12. Todos
 await go("/todos");
 await page.getByRole("checkbox", { name: /Claim UIF.*not done/ }).click();
@@ -211,7 +241,7 @@ const [download] = await Promise.all([page.waitForEvent("download"), page.getByR
 const file = `${SHOTS}/backup.json`;
 await download.saveAs(file);
 const backup = JSON.parse(fs.readFileSync(file, "utf8"));
-check("export holds 4 cycles, 2 spends, 1 income, 1 allocation", backup.cycles.length === 4 && backup.transactions.length === 2 && backup.income.length === 1 && backup.allocations.length === 1);
+check("export holds 4 cycles, 2 spends, 1 income, 2 allocations", backup.cycles.length === 4 && backup.transactions.length === 2 && backup.income.length === 1 && backup.allocations.length === 2);
 const csv = await page.request.get(BASE + "/export/csv/transactions");
 check("CSV export works", csv.ok() && (await csv.text()).includes("amount_rands"));
 await page.setInputFiles("#backup-file", file);

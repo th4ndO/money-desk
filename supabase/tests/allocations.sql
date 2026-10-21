@@ -47,6 +47,17 @@ begin
   end;
   update public.cycles set closed_at = null where id = '00000000-0000-4000-8000-0000000000d1';
 
+  -- Funding the plan raises only the pocket. R200 is left: fund R150.
+  perform public.allocate('2026-10-25', 'fund', jsonb_build_array(
+    jsonb_build_object('cycle_id', '00000000-0000-4000-8000-0000000000d1', 'amount_cents', 15000)));
+  select planned_cents into n from public.cycle_items where id = '00000000-0000-4000-8000-0000000000e1';
+  select pocket_cents into p from public.cycles where id = '00000000-0000-4000-8000-0000000000d1';
+  if (n, p) <> (150000::bigint, 165000::bigint) then raise exception 'funding moved item % pocket %', n, p; end if;
+  select id into a from public.allocations where cycle_id is not null;
+  perform public.unallocate(a);
+  select pocket_cents into p from public.cycles where id = '00000000-0000-4000-8000-0000000000d1';
+  if p <> 150000 then raise exception 'undoing funding left pocket %', p; end if;
+
   -- Undo reverses exactly.
   select id into a from public.allocations where cycle_item_id is not null;
   perform public.unallocate(a);

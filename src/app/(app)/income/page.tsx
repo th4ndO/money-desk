@@ -29,7 +29,7 @@ export default async function IncomePage() {
   const future = cycles.filter((c) => c.start_date >= nextStart && !c.closed_at);
   const [ready, allocRes, itemNames, bundle, { items: futureItems }] = await Promise.all([
     getReadyToAllocate(supabase),
-    supabase.from("allocations").select("id, cycle_item_id, reserve_id, amount_cents, date, note").order("date", { ascending: false }).order("created_at", { ascending: false }).limit(50),
+    supabase.from("allocations").select("id, cycle_item_id, reserve_id, cycle_id, amount_cents, date, note").order("date", { ascending: false }).order("created_at", { ascending: false }).limit(50),
     supabase.from("cycle_items").select("id, name, cycles(name)"),
     current && !current.closed_at ? getCycleBundle(supabase, current.id) : Promise.resolve(null),
     getItemsAndTransactions(supabase, future.map((c) => c.id)),
@@ -42,6 +42,7 @@ export default async function IncomePage() {
     }),
   );
   const potLabel = new Map((reservesRes.data ?? []).map((r) => [r.id as string, `${r.name} (reserve)`]));
+  const cycleLabel = new Map(cycles.map((c) => [c.id, `${c.name} plan (pocket)`]));
   const income = (incomeRes.data ?? []) as IncomeRow[];
   const spendableReserves = (reservesRes.data ?? []).filter((r) => r.spendable).reduce((s, r) => s + r.balance_cents, 0);
 
@@ -159,7 +160,11 @@ export default async function IncomePage() {
               <li key={a.id} className="row">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
-                    {a.cycle_item_id ? itemLabel.get(a.cycle_item_id) : potLabel.get(a.reserve_id as string)}
+                    {a.cycle_item_id
+                      ? itemLabel.get(a.cycle_item_id)
+                      : a.cycle_id
+                        ? cycleLabel.get(a.cycle_id)
+                        : potLabel.get(a.reserve_id as string)}
                   </p>
                   <p className="text-sm text-muted">{formatShortDate(a.date)}{a.note ? ` · ${a.note}` : ""}</p>
                 </div>

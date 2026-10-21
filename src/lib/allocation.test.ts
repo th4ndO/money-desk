@@ -24,6 +24,14 @@ describe("parseAllocationForm", () => {
     });
   });
 
+  it("reads pocket funding for a cycle", () => {
+    expect(parseAllocationForm([["fund:" + A, "500"]], 50000)).toEqual({
+      ok: true,
+      rows: [{ cycle_id: A, amount_cents: 50000 }],
+      total: 50000,
+    });
+  });
+
   it("refuses more than is ready", () => {
     expect(parseAllocationForm([["item:" + A, "500"]], 49999)).toEqual({ ok: false, message: "That's more than you have ready to allocate." });
   });

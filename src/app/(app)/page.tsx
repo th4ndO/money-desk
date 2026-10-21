@@ -50,6 +50,13 @@ export default async function Dashboard() {
         </p>
       </section>
 
+      {!closed && s.planned > s.pocket && (
+        <Link href={`/allocate?cycle=${cycle.id}`} className="notice block text-sm">
+          <Money cents={s.planned - s.pocket} /> of this cycle&apos;s plan isn&apos;t funded yet.{" "}
+          <span className="link">Fund it from income</span>
+        </Link>
+      )}
+
       {ready !== 0 && (
         <Link href={`/allocate?cycle=${cycle.id}`} className={`card flex items-center justify-between gap-3 ${ready < 0 ? "border-bad" : "border-accent"}`}>
           <span>

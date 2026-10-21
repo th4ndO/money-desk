@@ -40,6 +40,19 @@ export default async function AllocatePage({ searchParams }: PageProps<"/allocat
   } else {
     const s = summariseCycle(bundle.cycle, bundle.items, bundle.transactions, today);
     const left = new Map(s.envelopes.map((e) => [e.id, e.remaining]));
+    const gap = s.planned - s.pocket;
+    if (gap > 0) {
+      groups.push({
+        title: "Fund what's already planned",
+        targets: [
+          {
+            key: `fund:${bundle.cycle.id}`,
+            name: `${bundle.cycle.name} plan`,
+            detail: `${formatZAR(gap)} planned but not funded yet. Raises the pocket only.`,
+          },
+        ],
+      });
+    }
     groups.push({
       title: `Envelopes · ${bundle.cycle.name}`,
       targets: bundle.items
@@ -105,8 +118,9 @@ export default async function AllocatePage({ searchParams }: PageProps<"/allocat
       )}
 
       <p className="text-sm text-muted">
-        Allocating to a cycle item raises that item and the cycle&apos;s pocket by the same amount. Allocating to a reserve
-        raises its balance. You can undo any allocation on the Income page.
+        Funding the plan raises the cycle&apos;s pocket only, so items stay as planned. Adding to an item raises that item
+        and the pocket together (a top-up). Adding to a reserve raises its balance. You can undo any allocation on the
+        Income page.
       </p>
     </div>
   );

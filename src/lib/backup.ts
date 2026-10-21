@@ -102,6 +102,7 @@ export const backupSchema = z
           id: uuid,
           cycle_item_id: uuid.nullable(),
           reserve_id: uuid.nullable(),
+          cycle_id: uuid.nullable().default(null),
           amount_cents: positiveCents,
           date,
           note: optionalText(200),
@@ -120,8 +121,11 @@ export const backupSchema = z
     });
     const reserveIds = new Set(b.reserves.map((r) => r.id));
     b.allocations.forEach((a, n) => {
-      const ok = a.cycle_item_id ? itemCycle.has(a.cycle_item_id) && !a.reserve_id : !!a.reserve_id && reserveIds.has(a.reserve_id);
-      if (!ok) ctx.addIssue({ code: "custom", path: ["allocations", n], message: "points at a missing item or pot" });
+      const targets = [a.cycle_item_id, a.reserve_id, a.cycle_id].filter(Boolean).length;
+      const ok =
+        targets === 1 &&
+        (a.cycle_item_id ? itemCycle.has(a.cycle_item_id) : a.reserve_id ? reserveIds.has(a.reserve_id) : cycleIds.has(a.cycle_id!));
+      if (!ok) ctx.addIssue({ code: "custom", path: ["allocations", n], message: "points at a missing item, pot or cycle" });
     });
     b.transactions.forEach((t, n) => {
       if (!cycleIds.has(t.cycle_id)) ctx.addIssue({ code: "custom", path: ["transactions", n], message: "points at a missing cycle" });

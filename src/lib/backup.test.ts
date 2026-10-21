@@ -95,14 +95,23 @@ describe("allocations in backups", () => {
 
   it("rejects an allocation pointing at nothing", () => {
     const bad = structuredClone(good);
-    bad.allocations.push({ id: fakeId(), cycle_item_id: fakeId(), reserve_id: null, amount_cents: 100, date: "2026-10-19", note: null });
+    bad.allocations.push({ id: fakeId(), cycle_item_id: fakeId(), reserve_id: null, cycle_id: null, amount_cents: 100, date: "2026-10-19", note: null });
     expect(parseBackup(JSON.stringify(bad)).ok).toBe(false);
   });
 
   it("accepts an allocation to a real pot", () => {
     const ok = structuredClone(good);
-    ok.allocations.push({ id: fakeId(), cycle_item_id: null, reserve_id: ok.reserves[0].id, amount_cents: 100, date: "2026-10-19", note: null });
+    ok.allocations.push({ id: fakeId(), cycle_item_id: null, reserve_id: ok.reserves[0].id, cycle_id: null, amount_cents: 100, date: "2026-10-19", note: null });
     expect(parseBackup(JSON.stringify(ok)).ok).toBe(true);
+  });
+
+  it("accepts pocket funding for a real cycle, and rejects two targets at once", () => {
+    const ok = structuredClone(good);
+    ok.allocations.push({ id: fakeId(), cycle_item_id: null, reserve_id: null, cycle_id: ok.cycles[1].id, amount_cents: 50000, date: "2026-10-21", note: null });
+    expect(parseBackup(JSON.stringify(ok)).ok).toBe(true);
+    const bad = structuredClone(good);
+    bad.allocations.push({ id: fakeId(), cycle_item_id: null, reserve_id: bad.reserves[0].id, cycle_id: bad.cycles[1].id, amount_cents: 1, date: "2026-10-21", note: null });
+    expect(parseBackup(JSON.stringify(bad)).ok).toBe(false);
   });
 });
 
