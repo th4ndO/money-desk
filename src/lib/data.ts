@@ -114,3 +114,17 @@ export async function getReadyToAllocate(supabase: DB): Promise<number> {
   if (allocations.error) throw allocations.error;
   return readyToAllocate(income.data, allocations.data);
 }
+
+/** The first cycle that isn't closed and starts after `after`, if any. */
+export async function getNextOpenCycle(supabase: DB, after: ISODate): Promise<CycleRow | null> {
+  const { data, error } = await supabase
+    .from("cycles")
+    .select("id, name, start_date, end_date, pocket_cents, closed_at, notes")
+    .gt("start_date", after)
+    .is("closed_at", null)
+    .order("start_date")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data as CycleRow | null;
+}

@@ -7,7 +7,7 @@ import { Pill } from "@/components/Pill";
 import { StartCycleButton } from "@/components/StartCycleButton";
 import { requireUser } from "@/lib/auth";
 import { generateCycleItems, plannedTotal, proposeCycleForToday } from "@/lib/cycles";
-import { asRecurringItems, getCycleBundle, getCycleCovering, getReadyToAllocate, getRecurring, getSettings } from "@/lib/data";
+import { asRecurringItems, getCycleBundle, getCycleCovering, getNextOpenCycle, getReadyToAllocate, getRecurring, getSettings } from "@/lib/data";
 import { formatDate, formatShortDate, todayJHB } from "@/lib/dates";
 import { healthTone, summariseCycle } from "@/lib/summary";
 
@@ -16,9 +16,14 @@ export const metadata = { title: "Today" };
 export default async function Dashboard() {
   const { supabase } = await requireUser();
   const today = todayJHB();
-  const [current, ready] = await Promise.all([getCycleCovering(supabase, today), getReadyToAllocate(supabase)]);
+  const [covering, ready] = await Promise.all([getCycleCovering(supabase, today), getReadyToAllocate(supabase)]);
 
-  if (!current) return <NoCycle today={today} />;
+  if (!covering) return <NoCycle today={today} />;
+
+  // Once today's cycle is closed, look ahead to the next one instead of
+  // showing a read-only cycle for its last few hours.
+  const ahead = covering.closed_at ? await getNextOpenCycle(supabase, covering.end_date) : null;
+  const current = ahead ?? covering;
 
   const bundle = await getCycleBundle(supabase, current.id);
   if (!bundle) return <NoCycle today={today} />;
@@ -34,11 +39,19 @@ export default async function Dashboard() {
         <div>
           <h1 className="text-lg font-semibold">{cycle.name}</h1>
           <p className="text-sm text-muted">
-            {formatShortDate(cycle.start_date)} – {formatShortDate(cycle.end_date)} · {s.daysLeft} {s.daysLeft === 1 ? "day" : "days"} left
+            {formatShortDate(cycle.start_date)} – {formatShortDate(cycle.end_date)} ·{" "}
+            {ahead ? `starts ${formatShortDate(cycle.start_date)}` : `${s.daysLeft} ${s.daysLeft === 1 ? "day" : "days"} left`}
           </p>
         </div>
         {closed ? <Pill tone="neutral">Closed</Pill> : <Pill tone={healthTone(s.health)}>{s.health}</Pill>}
       </header>
+
+      {ahead && (
+        <p className="notice text-sm">
+          {covering.name} is closed, so this is {cycle.name}, which starts {formatShortDate(cycle.start_date)}. Spending
+          you log now is dated {formatShortDate(cycle.start_date)}.
+        </p>
+      )}
 
       <section aria-labelledby="left-label">
         <p id="left-label" className="text-sm text-muted">Left in pocket</p>
