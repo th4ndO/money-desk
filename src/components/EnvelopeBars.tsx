@@ -31,6 +31,7 @@ export function EnvelopeBars({
         const used = e.planned > 0 ? Math.min(100, Math.max(0, Math.round((out / e.planned) * 100))) : out > 0 ? 100 : 0;
         const over = e.remaining < 0;
         const history = histories?.get(e.id) ?? [];
+        const added = history.filter((h) => h.type === "allocation").reduce((t, h) => t + h.amount, 0);
         const summary = (
           <>
             <div className="flex items-baseline justify-between gap-3">
@@ -39,7 +40,16 @@ export function EnvelopeBars({
             </div>
             <div className="mt-0.5 flex items-baseline justify-between gap-3 text-sm text-muted">
               <span>
-                <Money cents={e.planned} /> allocated · <Money cents={e.spent} /> spent
+                {added > 0 ? (
+                  <>
+                    <Money cents={e.planned - added} /> planned + <Money cents={added} /> added
+                  </>
+                ) : (
+                  <>
+                    <Money cents={e.planned} /> allocated
+                  </>
+                )}{" "}
+                · <Money cents={e.spent} /> spent
                 {e.lent > 0 && <> · <span className="text-warn"><Money cents={e.lent} /> lent</span></>}
                 {e.repaidFromEarlier > 0 && <> · <span className="text-good">+<Money cents={e.repaidFromEarlier} /> paid back</span></>}
               </span>

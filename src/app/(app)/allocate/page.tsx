@@ -2,7 +2,9 @@ import Link from "next/link";
 import { Money } from "@/components/Money";
 import { PageHeader } from "@/components/PageHeader";
 import { requireUser } from "@/lib/auth";
-import { getCycleBundle, getCycles, getReadyToAllocate } from "@/lib/data";
+import { HistoryList } from "@/components/HistoryList";
+import { getCycleBundle, getCycles, getHistorySources, getReadyToAllocate } from "@/lib/data";
+import { HISTORY_FILTERS, buildHistory } from "@/lib/history";
 import { formatShortDate, todayJHB } from "@/lib/dates";
 import { formatZAR } from "@/lib/money";
 import { cycleStatus, summariseCycle } from "@/lib/summary";
@@ -16,11 +18,20 @@ export default async function AllocatePage({ searchParams }: PageProps<"/allocat
   const today = todayJHB();
   const { cycle: wanted } = await searchParams;
 
-  const [ready, cycles, reservesRes] = await Promise.all([
+  const [ready, cycles, reservesRes, sources] = await Promise.all([
     getReadyToAllocate(supabase),
     getCycles(supabase),
     supabase.from("reserves").select("id, name, balance_cents, spendable, notes, sort_order").order("sort_order"),
+    getHistorySources(supabase),
   ]);
+  const allocated = buildHistory(sources).filter(HISTORY_FILTERS.allocations);
+  const allocatedTotal = allocated.reduce((t, e) => t + e.amount, 0);
+  const incomeTotal = sources.income.reduce((t, i) => t + i.amount_cents, 0);
+  const byDestination = new Map<string, number>();
+  for (const e of allocated) {
+    const where = e.title.replace(/^Allocated to /, "");
+    byDestination.set(where, (byDestination.get(where) ?? 0) + e.amount);
+  }
   const reserves = (reservesRes.data ?? []) as ReserveRow[];
 
   // Open cycles that can still take money: current, upcoming, or ended but not closed.
@@ -116,6 +127,37 @@ export default async function AllocatePage({ searchParams }: PageProps<"/allocat
       ) : (
         <AllocateForm ready={ready} groups={groups} today={today} />
       )}
+
+      <section aria-labelledby="alloc-history" className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <h2 id="alloc-history" className="section-title">Allocation history</h2>
+          <Link href="/history?show=allocations" className="link text-sm">In History</Link>
+        </div>
+        <div className="card grid grid-cols-2 gap-1 text-sm">
+          <span className="text-muted">Income recorded</span>
+          <Money cents={incomeTotal} className="text-right" />
+          <span className="text-muted">Allocated</span>
+          <Money cents={allocatedTotal} className="text-right" />
+          <span className="font-semibold">Ready to allocate</span>
+          <Money cents={ready} signed className="text-right font-semibold" />
+        </div>
+        {byDestination.size > 0 && (
+          <details className="card">
+            <summary className="font-medium">Where it went ({byDestination.size})</summary>
+            <ul className="mt-2">
+              {[...byDestination.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .map(([where, amount]) => (
+                  <li key={where} className="row text-sm">
+                    <span className="min-w-0 flex-1 truncate">{where}</span>
+                    <Money cents={amount} />
+                  </li>
+                ))}
+            </ul>
+          </details>
+        )}
+        <HistoryList entries={allocated} empty="Nothing allocated yet." />
+      </section>
 
       <p className="text-sm text-muted">
         Funding the plan raises the cycle&apos;s pocket only, so items stay as planned. Adding to an item raises that item

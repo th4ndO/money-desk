@@ -182,7 +182,7 @@ check("allocating says what is left", await toast("Allocated R2\u00a0500. R6\u00
 await go("/");
 main = await page.textContent("main");
 check("dashboard shows R6 000 ready to allocate", main.includes("Ready to allocate") && main.includes("R6\u00a0000"));
-check("Personal now has R1 500 allocated", main.includes("R1\u00a0500 allocated"));
+check("Personal shows R1 000 planned + R500 added", main.includes("R1\u00a0000 planned + R500 added"));
 check("pocket grew by R500: R3 712 left", main.includes("R3\u00a0712"));
 
 // Spend straight from the Personal envelope
@@ -265,6 +265,9 @@ await go("/");
 check("the loan is owed again after deleting the repayment", (await page.textContent("main")).includes("Owed to you"));
 await go("/history?show=allocations");
 check("history lists allocations with undo", (await page.getByRole("button", { name: /^Undo:/ }).count()) > 0);
+await go("/allocate");
+main = await page.textContent("main");
+check("allocate page shows allocation history", main.includes("Allocation history") && main.includes("Allocated to Personal"));
 
 // 12. Todos
 await go("/todos");
