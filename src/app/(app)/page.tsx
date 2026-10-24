@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { BillRow } from "@/components/BillRow";
 import { EnvelopeBars } from "@/components/EnvelopeBars";
+import { OwedToYou } from "@/components/OwedToYou";
+import { getCycleExtras } from "@/lib/envelope-history";
 import { LogSpendForm } from "@/components/LogSpendForm";
 import { Money } from "@/components/Money";
 import { Pill } from "@/components/Pill";
@@ -25,7 +27,7 @@ export default async function Dashboard() {
   const ahead = covering.closed_at ? await getNextOpenCycle(supabase, covering.end_date) : null;
   const current = ahead ?? covering;
 
-  const bundle = await getCycleBundle(supabase, current.id);
+  const [bundle, extras] = await Promise.all([getCycleBundle(supabase, current.id), getCycleExtras(supabase, current.id)]);
   if (!bundle) return <NoCycle today={today} />;
   const { cycle, items, transactions } = bundle;
   const s = summariseCycle(cycle, items, transactions, today);
@@ -96,9 +98,11 @@ export default async function Dashboard() {
       {!closed && (
         <section className="card" aria-labelledby="log-title">
           <h2 id="log-title" className="section-title mb-3">Log spending</h2>
-          <LogSpendForm cycleId={cycle.id} envelopes={s.envelopes.map((e) => ({ id: e.id, name: e.name }))} />
+          <LogSpendForm cycleId={cycle.id} envelopes={s.envelopes.map((e) => ({ id: e.id, name: e.name }))} loans={extras.loanOptions} />
         </section>
       )}
+
+      <OwedToYou loans={extras.loans} />
 
       <section aria-labelledby="next-title">
         <h2 id="next-title" className="section-title mb-1">Next bills</h2>
@@ -116,9 +120,9 @@ export default async function Dashboard() {
       <section aria-labelledby="env-title">
         <div className="mb-3 flex items-baseline justify-between">
           <h2 id="env-title" className="section-title">Envelopes</h2>
-          <span className="text-sm text-muted">Tap one to spend from it</span>
+          <span className="text-sm text-muted">Tap one to log or see history</span>
         </div>
-        <EnvelopeBars envelopes={s.envelopes} cycleId={cycle.id} readOnly={closed} />
+        <EnvelopeBars envelopes={s.envelopes} cycleId={cycle.id} readOnly={closed} histories={extras.histories} loans={extras.loanOptions} />
         {s.unplannedSpent > 0 && (
           <p className="mt-3 text-sm text-muted">
             Plus <Money cents={s.unplannedSpent} /> unplanned
@@ -153,9 +157,10 @@ export default async function Dashboard() {
         </dl>
       </section>
 
-      <Link href={`/cycles/${cycle.id}`} className="btn btn-secondary w-full">
-        Edit amounts and see all spending
-      </Link>
+      <div className="grid grid-cols-2 gap-3">
+        <Link href={`/cycles/${cycle.id}`} className="btn btn-secondary">Edit amounts</Link>
+        <Link href="/history" className="btn btn-secondary">History</Link>
+      </div>
     </div>
   );
 }

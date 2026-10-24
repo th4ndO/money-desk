@@ -12,7 +12,7 @@ export async function fetchBackup(supabase: SupabaseClient): Promise<Backup> {
     q("recurring_items", "id, name, kind, amount_cents, due_day, frequency, interval_months, starts_on, ends_on, category, notes, active, sort_order", "sort_order"),
     q("cycles", "id, name, start_date, end_date, pocket_cents, closed_at, notes", "start_date"),
     q("cycle_items", "id, cycle_id, recurring_item_id, name, kind, category, planned_cents, due_date, paid, paid_on, actual_cents, sort_order"),
-    q("transactions", "id, cycle_id, cycle_item_id, amount_cents, date, note", "date"),
+    q("transactions", "id, cycle_id, cycle_item_id, amount_cents, date, note, kind, counterparty, repays_id", "date"),
     q("income", "id, amount_cents, date, source, notes", "date"),
     q("reserves", "id, name, balance_cents, spendable, notes, sort_order", "sort_order"),
     q("todos", "id, text, done, due_date, sort_order", "sort_order"),

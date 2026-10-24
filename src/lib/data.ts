@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readyToAllocate } from "./allocation";
+import type { HistorySources } from "./history";
 import type { RecurringItem } from "./cycles";
 import type { ISODate } from "./dates";
 import type { CycleItemRow, CycleRow, RecurringItemRow, SettingsRow, TransactionRow } from "./types";
@@ -56,7 +57,7 @@ export async function getCycleBundle(supabase: DB, cycleId: string): Promise<Cyc
       .order("sort_order"),
     supabase
       .from("transactions")
-      .select("id, cycle_id, cycle_item_id, amount_cents, date, note, created_at")
+      .select("id, cycle_id, cycle_item_id, amount_cents, date, note, kind, counterparty, repays_id, created_at")
       .eq("cycle_id", cycleId)
       .order("date", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -76,7 +77,7 @@ export async function getItemsAndTransactions(supabase: DB, cycleIds: string[]) 
       .from("cycle_items")
       .select("id, cycle_id, recurring_item_id, name, kind, category, planned_cents, due_date, paid, paid_on, actual_cents, sort_order")
       .in("cycle_id", cycleIds),
-    supabase.from("transactions").select("id, cycle_id, cycle_item_id, amount_cents, date, note").in("cycle_id", cycleIds),
+    supabase.from("transactions").select("id, cycle_id, cycle_item_id, amount_cents, date, note, kind, repays_id").in("cycle_id", cycleIds),
   ]);
   if (items.error) throw items.error;
   if (txs.error) throw txs.error;
@@ -127,4 +128,64 @@ export async function getNextOpenCycle(supabase: DB, after: ISODate): Promise<Cy
     .maybeSingle();
   if (error) throw error;
   return data as CycleRow | null;
+}
+
+/** All loans and their repayments, across every cycle. */
+export async function getLoanEntries(supabase: DB) {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("id, cycle_id, cycle_item_id, amount_cents, date, note, kind, counterparty, repays_id")
+    .or("kind.eq.lend,repays_id.not.is.null");
+  if (error) throw error;
+  return data as TransactionRow[];
+}
+
+/**
+ * The cycle you're working in: the one covering today, or, once that is
+ * closed, the next open one.
+ */
+export async function getWorkingCycle(supabase: DB, today: ISODate): Promise<CycleRow | null> {
+  const covering = await getCycleCovering(supabase, today);
+  if (covering && !covering.closed_at) return covering;
+  return getNextOpenCycle(supabase, covering ? covering.end_date : today);
+}
+
+/**
+ * Everything the history list needs. With a cycleId, only that cycle's
+ * spending, bills and allocations to its items (for envelope histories).
+ */
+export async function getHistorySources(supabase: DB, cycleId?: string): Promise<HistorySources> {
+  const itemsQ = supabase.from("cycle_items").select("id, name, cycle_id, kind, paid, paid_on, actual_cents, planned_cents");
+  const txQ = supabase
+    .from("transactions")
+    .select("id, amount_cents, date, note, kind, counterparty, repays_id, cycle_id, cycle_item_id, created_at")
+    .order("date", { ascending: false })
+    .limit(500);
+  const [items, txs, income, allocations, reserves, cycles] = await Promise.all([
+    cycleId ? itemsQ.eq("cycle_id", cycleId) : itemsQ,
+    cycleId ? txQ.eq("cycle_id", cycleId) : txQ,
+    cycleId
+      ? Promise.resolve({ data: [], error: null })
+      : supabase.from("income").select("id, amount_cents, date, source, notes, created_at").order("date", { ascending: false }).limit(300),
+    supabase
+      .from("allocations")
+      .select("id, amount_cents, date, note, cycle_item_id, reserve_id, cycle_id, created_at")
+      .order("date", { ascending: false })
+      .limit(300),
+    supabase.from("reserves").select("id, name"),
+    supabase.from("cycles").select("id, name"),
+  ]);
+  for (const r of [items, txs, income, allocations, reserves, cycles]) if (r.error) throw r.error;
+
+  const itemRows = items.data ?? [];
+  const itemIds = new Set(itemRows.map((i) => i.id));
+  return {
+    income: income.data ?? [],
+    allocations: (allocations.data ?? []).filter((a) => !cycleId || (a.cycle_item_id && itemIds.has(a.cycle_item_id))),
+    transactions: txs.data ?? [],
+    paidBills: itemRows.filter((i) => i.kind !== "envelope" && i.paid),
+    itemNames: new Map(itemRows.map((i) => [i.id, { name: i.name, cycleId: i.cycle_id }])),
+    reserveNames: new Map((reserves.data ?? []).map((r) => [r.id, r.name])),
+    cycleNames: new Map((cycles.data ?? []).map((c) => [c.id, c.name])),
+  };
 }

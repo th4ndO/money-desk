@@ -18,7 +18,7 @@ import {
 } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { generateCycleItems, newCycleBounds, plannedTotal } from "@/lib/cycles";
-import { asRecurringItems, cycleIsOpen, getRecurring, getSettings } from "@/lib/data";
+import { asRecurringItems, cycleIsOpen, getRecurring, getSettings, getWorkingCycle } from "@/lib/data";
 import { formatDate, todayJHB } from "@/lib/dates";
 import { formatZAR } from "@/lib/money";
 
@@ -184,10 +184,15 @@ const spendSchema = z.object({
   amount: zPositiveMoney,
   date: zOptionalDate,
   note: zOptionalText(200),
+  kind: z.enum(["spend", "lend", "refund"]).optional().default("spend"),
+  counterparty: zOptionalText(100),
+  repays_id: z.string().optional().transform((s) => (s ? s : null)).pipe(zId.nullable()),
 });
 
+type Supa = Awaited<ReturnType<typeof requireUser>>["supabase"];
+
 async function checkSpend(
-  supabase: Awaited<ReturnType<typeof requireUser>>["supabase"],
+  supabase: Supa,
   data: z.infer<typeof spendSchema>,
 ): Promise<{ error: ActionResult } | { date: string; envelope: string }> {
   const { data: cycle } = await supabase
@@ -219,12 +224,52 @@ async function checkSpend(
   return { date, envelope };
 }
 
+/** What a loan still has outstanding, excluding one repayment being edited. */
+async function loanOutstanding(supabase: Supa, loanId: string, exceptRepayment?: string) {
+  const [{ data: loan }, { data: repayments }] = await Promise.all([
+    supabase.from("transactions").select("id, kind, amount_cents, counterparty").eq("id", loanId).maybeSingle(),
+    supabase.from("transactions").select("id, amount_cents").eq("repays_id", loanId),
+  ]);
+  if (!loan || loan.kind !== "lend") return null;
+  const repaid = (repayments ?? []).filter((r) => r.id !== exceptRepayment).reduce((t, r) => t + r.amount_cents, 0);
+  return { counterparty: loan.counterparty as string, outstanding: loan.amount_cents - repaid };
+}
+
+/** Rules that depend on the kind of entry. Returns the counterparty to store. */
+async function checkKind(
+  supabase: Supa,
+  data: z.infer<typeof spendSchema>,
+  editingId?: string,
+): Promise<{ error: ActionResult } | { counterparty: string | null }> {
+  if (data.kind === "lend") {
+    if (!data.counterparty) return { error: fail("Say who you lent it to.") };
+    return { counterparty: data.counterparty };
+  }
+  if (data.kind === "refund" && data.repays_id) {
+    const loan = await loanOutstanding(supabase, data.repays_id, editingId);
+    if (!loan) return { error: fail("That loan no longer exists. Refresh the page.") };
+    if (data.amount > loan.outstanding) {
+      return { error: fail(`${loan.counterparty} only owes ${formatZAR(Math.max(0, loan.outstanding))} on that loan.`) };
+    }
+    return { counterparty: data.counterparty ?? loan.counterparty };
+  }
+  return { counterparty: data.kind === "spend" ? null : data.counterparty };
+}
+
+function entryMessage(kind: string, amount: number, envelope: string, who: string | null) {
+  if (kind === "lend") return `Lent ${formatZAR(amount)} to ${who} from ${envelope}`;
+  if (kind === "refund") return `Got ${formatZAR(amount)} back${who ? ` from ${who}` : ""} into ${envelope}`;
+  return `Logged ${formatZAR(amount)} to ${envelope}`;
+}
+
 export async function logSpending(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const parsed = parseForm(spendSchema, fd);
   if (!parsed.ok) return parsed.result;
   const { supabase } = await requireUser();
   const check = await checkSpend(supabase, parsed.data);
   if ("error" in check) return check.error;
+  const kindCheck = await checkKind(supabase, parsed.data);
+  if ("error" in kindCheck) return kindCheck.error;
 
   const { error } = await supabase.from("transactions").insert({
     cycle_id: parsed.data.cycle_id,
@@ -232,10 +277,13 @@ export async function logSpending(_prev: ActionResult | null, fd: FormData): Pro
     amount_cents: parsed.data.amount,
     date: check.date,
     note: parsed.data.note,
+    kind: parsed.data.kind,
+    counterparty: kindCheck.counterparty,
+    repays_id: parsed.data.kind === "refund" ? parsed.data.repays_id : null,
   });
   if (error) return fail(NETWORK_FAIL);
   refresh();
-  return ok(`Logged ${formatZAR(parsed.data.amount)} to ${check.envelope}`);
+  return ok(entryMessage(parsed.data.kind, parsed.data.amount, check.envelope, kindCheck.counterparty));
 }
 
 export async function updateTransaction(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
@@ -245,6 +293,22 @@ export async function updateTransaction(_prev: ActionResult | null, fd: FormData
   const check = await checkSpend(supabase, parsed.data);
   if ("error" in check) return check.error;
 
+  // The kind and loan link stay as they were; only the details change.
+  const { data: existing } = await supabase
+    .from("transactions")
+    .select("kind, repays_id")
+    .eq("id", parsed.data.id)
+    .maybeSingle();
+  if (!existing) return fail("That entry no longer exists. Refresh the page.");
+  const data = { ...parsed.data, kind: existing.kind, repays_id: existing.repays_id };
+  const kindCheck = await checkKind(supabase, data, parsed.data.id);
+  if ("error" in kindCheck) return kindCheck.error;
+  if (existing.kind === "lend") {
+    const { data: repayments } = await supabase.from("transactions").select("amount_cents").eq("repays_id", parsed.data.id);
+    const repaid = (repayments ?? []).reduce((t, r) => t + r.amount_cents, 0);
+    if (parsed.data.amount < repaid) return fail(`${formatZAR(repaid)} of this loan is already paid back; the loan can't be less.`);
+  }
+
   const { error } = await supabase
     .from("transactions")
     .update({
@@ -252,12 +316,78 @@ export async function updateTransaction(_prev: ActionResult | null, fd: FormData
       amount_cents: parsed.data.amount,
       date: check.date,
       note: parsed.data.note,
+      counterparty: kindCheck.counterparty,
     })
     .eq("id", parsed.data.id)
     .eq("cycle_id", parsed.data.cycle_id);
   if (error) return fail(NETWORK_FAIL);
   refresh();
   return ok("Saved");
+}
+
+/**
+ * Someone paid back a loan. The money goes into the cycle you're in now:
+ * the same envelope if the loan was made this cycle, otherwise the envelope
+ * with the same name, otherwise unplanned.
+ */
+export async function markRepaid(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const parsed = parseForm(z.object({ loan_id: zId, amount: z.string().optional() }), fd);
+  if (!parsed.ok) return parsed.result;
+  const { supabase } = await requireUser();
+
+  const [loan, { data: loanRow }] = await Promise.all([
+    loanOutstanding(supabase, parsed.data.loan_id),
+    supabase.from("transactions").select("cycle_id, cycle_item_id, cycle_items(name)").eq("id", parsed.data.loan_id).maybeSingle(),
+  ]);
+  if (!loan || !loanRow) return fail("That loan no longer exists. Refresh the page.");
+  if (loan.outstanding <= 0) return fail(`${loan.counterparty} has already paid it all back.`);
+
+  let amount = loan.outstanding;
+  if (parsed.data.amount && parsed.data.amount.trim() !== "") {
+    const a = zPositiveMoney.safeParse(parsed.data.amount);
+    if (!a.success) return fail("Enter the amount paid back, like 300.");
+    if (a.data > loan.outstanding) return fail(`${loan.counterparty} only owes ${formatZAR(loan.outstanding)}.`);
+    amount = a.data;
+  }
+
+  const target = await getWorkingCycle(supabase, todayJHB());
+  if (!target) return fail("There's no open cycle to put the money into. Start one first.");
+
+  let itemId: string | null = null;
+  let envelope = "unplanned";
+  const loanEnvelope = (loanRow.cycle_items as unknown as { name: string } | null)?.name ?? null;
+  if (loanRow.cycle_id === target.id) {
+    itemId = loanRow.cycle_item_id;
+    envelope = loanEnvelope ?? "unplanned";
+  } else if (loanEnvelope) {
+    const { data: same } = await supabase
+      .from("cycle_items")
+      .select("id, name")
+      .eq("cycle_id", target.id)
+      .eq("kind", "envelope")
+      .eq("name", loanEnvelope)
+      .maybeSingle();
+    if (same) {
+      itemId = same.id;
+      envelope = same.name;
+    }
+  }
+
+  const today = todayJHB();
+  const date = today < target.start_date ? target.start_date : today > target.end_date ? target.end_date : today;
+  const { error } = await supabase.from("transactions").insert({
+    cycle_id: target.id,
+    cycle_item_id: itemId,
+    amount_cents: amount,
+    date,
+    kind: "refund",
+    counterparty: loan.counterparty,
+    repays_id: parsed.data.loan_id,
+    note: amount < loan.outstanding ? "Part payment" : null,
+  });
+  if (error) return fail(NETWORK_FAIL);
+  refresh();
+  return ok(`${loan.counterparty} paid back ${formatZAR(amount)}. It's back in ${envelope} (${target.name}).`);
 }
 
 export async function deleteTransaction(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
@@ -271,7 +401,7 @@ export async function deleteTransaction(_prev: ActionResult | null, fd: FormData
   const { error } = await supabase.from("transactions").delete().eq("id", tx.id);
   if (error) return fail(NETWORK_FAIL);
   refresh();
-  return ok(`Deleted ${formatZAR(tx.amount_cents)} spend`);
+  return ok(`Deleted ${formatZAR(tx.amount_cents)} entry`);
 }
 
 /* The cycle itself -------------------------------------------------------- */

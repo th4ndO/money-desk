@@ -54,6 +54,8 @@ export interface CycleItemRow {
   sort_order: number;
 }
 
+export type EntryKind = "spend" | "lend" | "refund";
+
 export interface TransactionRow {
   id: string;
   cycle_id: string;
@@ -61,6 +63,10 @@ export interface TransactionRow {
   amount_cents: Cents;
   date: ISODate;
   note: string | null;
+  /** spend = gone; lend = owed back to me; refund = money back in. Missing means spend. */
+  kind?: EntryKind;
+  counterparty?: string | null;
+  repays_id?: string | null;
   created_at?: string;
 }
 

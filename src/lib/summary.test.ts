@@ -76,8 +76,8 @@ describe("summariseCycle", () => {
 
   it("tracks envelopes and unplanned spending separately", () => {
     expect(s.envelopes).toEqual([
-      { id: groceries.id, name: "Groceries", planned: 136200, spent: 60000, remaining: 76200 },
-      { id: transport.id, name: "Transport", planned: 100000, spent: 20000, remaining: 80000 },
+      { id: groceries.id, name: "Groceries", planned: 136200, spent: 60000, lent: 0, repaidFromEarlier: 0, remaining: 76200 },
+      { id: transport.id, name: "Transport", planned: 100000, spent: 20000, lent: 0, repaidFromEarlier: 0, remaining: 80000 },
     ]);
     expect(s.unplannedSpent).toBe(5000);
     expect(s.envelopeRemaining).toBe(156200);

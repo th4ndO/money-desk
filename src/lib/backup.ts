@@ -77,6 +77,10 @@ export const backupSchema = z
         amount_cents: positiveCents,
         date,
         note: optionalText(200),
+        // Added with lending; older backups are all spending.
+        kind: z.enum(["spend", "lend", "refund"]).default("spend"),
+        counterparty: optionalText(100),
+        repays_id: uuid.nullable().default(null),
       }),
     ),
     income: z.array(
@@ -127,7 +131,12 @@ export const backupSchema = z
         (a.cycle_item_id ? itemCycle.has(a.cycle_item_id) : a.reserve_id ? reserveIds.has(a.reserve_id) : cycleIds.has(a.cycle_id!));
       if (!ok) ctx.addIssue({ code: "custom", path: ["allocations", n], message: "points at a missing item, pot or cycle" });
     });
+    const loanIds = new Set(b.transactions.filter((t) => t.kind === "lend").map((t) => t.id));
     b.transactions.forEach((t, n) => {
+      if (t.kind === "lend" && !t.counterparty)
+        ctx.addIssue({ code: "custom", path: ["transactions", n], message: "is a loan without a name" });
+      if (t.repays_id && (t.kind !== "refund" || !loanIds.has(t.repays_id)))
+        ctx.addIssue({ code: "custom", path: ["transactions", n], message: "repays something that isn't a loan" });
       if (!cycleIds.has(t.cycle_id)) ctx.addIssue({ code: "custom", path: ["transactions", n], message: "points at a missing cycle" });
       if (t.cycle_item_id && itemCycle.get(t.cycle_item_id) !== t.cycle_id)
         ctx.addIssue({ code: "custom", path: ["transactions", n], message: "points at an envelope in a different cycle" });

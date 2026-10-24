@@ -72,7 +72,16 @@ export function daysInclusive(a: ISODate, b: ISODate): number {
 }
 
 /** Today's date in Johannesburg, whatever zone the server runs in. */
-export function todayJHB(now: Date = new Date()): ISODate {
+export function todayJHB(now?: Date): ISODate {
+  // Browser walkthroughs pin "today" so their expected figures stay true.
+  // Both variables are needed; neither is ever set on Vercel.
+  if (!now && process.env.MONEY_DESK_E2E === "1" && process.env.MONEY_DESK_FAKE_TODAY) {
+    return process.env.MONEY_DESK_FAKE_TODAY;
+  }
+  return jhbDate(now ?? new Date());
+}
+
+function jhbDate(now: Date): ISODate {
   // en-CA formats as YYYY-MM-DD.
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: TIMEZONE,

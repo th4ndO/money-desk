@@ -70,7 +70,7 @@ describe("parseBackup", () => {
 
   it("rejects dangling references", () => {
     const bad = structuredClone(good);
-    bad.transactions.push({ id: fakeId(), cycle_id: fakeId(), cycle_item_id: null, amount_cents: 100, date: "2026-10-01", note: null });
+    bad.transactions.push({ id: fakeId(), cycle_id: fakeId(), cycle_item_id: null, amount_cents: 100, date: "2026-10-01", note: null, kind: "spend", counterparty: null, repays_id: null });
     const r = parseBackup(JSON.stringify(bad));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain("missing cycle");
@@ -127,5 +127,38 @@ describe("toCSV", () => {
 
   it("returns an empty string for no rows", () => {
     expect(toCSV([])).toBe("");
+  });
+});
+
+describe("lending in backups", () => {
+  const good = buildSeedBackup("2026-10-19", fakeId);
+  const cycleId = good.cycles[1].id;
+  const tx = (o: Partial<(typeof good.transactions)[number]>) => ({
+    id: fakeId(), cycle_id: cycleId, cycle_item_id: null, amount_cents: 100, date: "2026-10-24", note: null,
+    kind: "spend" as const, counterparty: null, repays_id: null, ...o,
+  });
+
+  it("treats older entries without a kind as spending", () => {
+    const old = structuredClone(good) as unknown as { transactions: Record<string, unknown>[] };
+    old.transactions.push({ id: fakeId(), cycle_id: cycleId, cycle_item_id: null, amount_cents: 100, date: "2026-10-24", note: null });
+    const r = parseBackup(JSON.stringify(old));
+    expect(r.ok && r.backup.transactions[0].kind).toBe("spend");
+  });
+
+  it("accepts a loan and its repayment", () => {
+    const ok = structuredClone(good);
+    const loan = tx({ kind: "lend", counterparty: "Thabo" });
+    ok.transactions.push(loan, tx({ kind: "refund", repays_id: loan.id }));
+    expect(parseBackup(JSON.stringify(ok)).ok).toBe(true);
+  });
+
+  it("rejects a nameless loan and a repayment of a spend", () => {
+    const a = structuredClone(good);
+    a.transactions.push(tx({ kind: "lend" }));
+    expect(parseBackup(JSON.stringify(a)).ok).toBe(false);
+    const b = structuredClone(good);
+    const spend = tx({});
+    b.transactions.push(spend, tx({ kind: "refund", repays_id: spend.id }));
+    expect(parseBackup(JSON.stringify(b)).ok).toBe(false);
   });
 });

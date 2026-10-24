@@ -1,5 +1,6 @@
 import type { Cents } from "./money";
-import type { CycleItemRow, TransactionRow } from "./types";
+import { type EntryLike, envelopeFlows } from "./summary";
+import type { CycleItemRow } from "./types";
 
 export interface ReviewLine {
   id: string | null;
@@ -29,18 +30,19 @@ export interface CycleReview {
 export function reviewCycle(
   pocket: Cents,
   items: readonly CycleItemRow[],
-  transactions: readonly Pick<TransactionRow, "cycle_item_id" | "amount_cents">[],
+  transactions: readonly EntryLike[],
 ): CycleReview {
-  const spent = new Map<string, Cents>();
-  let unplanned = 0;
+  const byItem = new Map<string | null, EntryLike[]>();
   for (const t of transactions) {
-    if (t.cycle_item_id) spent.set(t.cycle_item_id, (spent.get(t.cycle_item_id) ?? 0) + t.amount_cents);
-    else unplanned += t.amount_cents;
+    const key = t.cycle_item_id ?? null;
+    byItem.set(key, [...(byItem.get(key) ?? []), t]);
   }
+  const net = (id: string | null) => envelopeFlows(byItem.get(id) ?? []).net;
+  const unplanned = net(null);
 
   const lines: ReviewLine[] = items.map((i) => {
     const actual =
-      i.kind === "envelope" ? (spent.get(i.id) ?? 0) : i.paid ? (i.actual_cents ?? i.planned_cents) : 0;
+      i.kind === "envelope" ? net(i.id) : i.paid ? (i.actual_cents ?? i.planned_cents) : 0;
     return {
       id: i.id,
       name: i.name,
@@ -52,7 +54,7 @@ export function reviewCycle(
     };
   });
 
-  if (unplanned > 0) {
+  if (unplanned !== 0) {
     lines.push({ id: null, name: "Unplanned spending", kind: "unplanned", planned: 0, actual: unplanned, difference: unplanned });
   }
 

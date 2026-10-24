@@ -87,7 +87,7 @@ check("dashboard shows the October cycle", main.includes("October 2026"));
 check("left in pocket = R3 362 (bills and savings paid)", main.includes("R3 362"));
 {
   // Days left in October counting today, in Johannesburg time.
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Johannesburg" }).format(new Date());
+  const today = process.env.MONEY_DESK_FAKE_TODAY ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Johannesburg" }).format(new Date());
   const daysLeft = Math.round((Date.parse("2026-10-22") - Date.parse(today)) / 86400000) + 1;
   const cents = Math.floor(336200 / daysLeft);
   const expected = "R" + Math.floor(cents / 100).toLocaleString("en").replace(/,/g, "\u00a0") + (cents % 100 ? "." + String(cents % 100).padStart(2, "0") : "");
@@ -229,6 +229,43 @@ check("pocket is now R10 245", main.includes("R10\u00a0245"));
 const pp = page.locator("li", { has: page.locator("summary", { hasText: "Profound Productions" }) });
 check("Profound Productions stays at R500 allocated", (await pp.textContent()).includes("R500 allocated"));
 
+// 11d. Lend from Personal, get it back: not counted as spending
+await go("/");
+let personalCard = page.locator("li", { has: page.locator("summary", { hasText: "Personal" }) });
+await personalCard.locator("summary").click();
+await personalCard.getByText("Lent", { exact: true }).click();
+await personalCard.getByLabel("Lent (R)").fill("300");
+await personalCard.getByLabel("Lent to").fill("Thabo");
+await personalCard.getByRole("button", { name: "Lend from Personal" }).click();
+check("lending says who and from where", await toast("Lent R300 to Thabo from Personal"));
+await page.getByText("Owed to you").waitFor({ timeout: 8000 });
+main = await page.textContent("main");
+check("Personal shows R300 lent, not spent", (await personalCard.textContent()).includes("R300 lent"));
+check("Owed to you lists Thabo R300", main.includes("Owed to you") && main.includes("Thabo"));
+const owed = page.locator("section", { has: page.getByRole("heading", { name: "Owed to you" }) });
+await owed.getByRole("button", { name: "Paid back" }).first().click();
+check("paid back confirms where the money went", await toast("Thabo paid back R300"));
+await page.waitForFunction(() => !document.body.innerText.includes("Owed to you"), null, { timeout: 8000 });
+personalCard = page.locator("li", { has: page.locator("summary", { hasText: "Personal" }) });
+const personalText = await personalCard.textContent();
+check("after repayment Personal has nothing lent", !personalText.includes("lent"));
+check("after repayment Personal is back to R1 250 left", personalText.includes("R1\u00a0250"));
+await shot("13-after-repayment");
+
+// History shows it all, and entries can be removed there
+await go("/history?show=loans");
+main = await page.textContent("main");
+check("history lists the loan and the repayment", main.includes("Lent to Thabo") && main.includes("Thabo paid back"));
+await noSideScroll("history");
+await shot("14-history");
+page.once("dialog", (d) => d.accept());
+await page.getByRole("button", { name: "Delete: Thabo paid back" }).click();
+check("deleting the repayment from history confirms", await toast("Deleted"));
+await go("/");
+check("the loan is owed again after deleting the repayment", (await page.textContent("main")).includes("Owed to you"));
+await go("/history?show=allocations");
+check("history lists allocations with undo", (await page.getByRole("button", { name: /^Undo:/ }).count()) > 0);
+
 // 12. Todos
 await go("/todos");
 await page.getByRole("checkbox", { name: /Claim UIF.*not done/ }).click();
@@ -241,14 +278,14 @@ const [download] = await Promise.all([page.waitForEvent("download"), page.getByR
 const file = `${SHOTS}/backup.json`;
 await download.saveAs(file);
 const backup = JSON.parse(fs.readFileSync(file, "utf8"));
-check("export holds 4 cycles, 2 spends, 1 income, 2 allocations", backup.cycles.length === 4 && backup.transactions.length === 2 && backup.income.length === 1 && backup.allocations.length === 2);
+check("export holds 4 cycles, 3 entries, 1 income, 2 allocations", backup.cycles.length === 4 && backup.transactions.length === 3 && backup.income.length === 1 && backup.allocations.length === 2);
 const csv = await page.request.get(BASE + "/export/csv/transactions");
 check("CSV export works", csv.ok() && (await csv.text()).includes("amount_rands"));
 await page.setInputFiles("#backup-file", file);
 await page.getByText("Importing replaces everything").waitFor();
 await page.getByLabel("Type REPLACE to confirm").fill("REPLACE");
 await page.getByRole("button", { name: "Replace my data with this backup" }).click();
-check("restore from JSON works", await toast("Restored 4 cycles, 2 spends, 1 income entries"));
+check("restore from JSON works", await toast("Restored 4 cycles, 3 spends, 1 income entries"));
 await noSideScroll("settings");
 await shot("07-settings");
 

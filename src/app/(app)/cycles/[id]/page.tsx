@@ -8,6 +8,7 @@ import { Pill } from "@/components/Pill";
 import { ReviewTable } from "@/components/ReviewTable";
 import { requireUser } from "@/lib/auth";
 import { getCycleBundle } from "@/lib/data";
+import { getCycleExtras } from "@/lib/envelope-history";
 import { formatDate, formatShortDate, todayJHB } from "@/lib/dates";
 import { reviewCycle } from "@/lib/review";
 import { cycleStatus, healthTone, summariseCycle } from "@/lib/summary";
@@ -19,7 +20,7 @@ export default async function CycleDetail({ params }: PageProps<"/cycles/[id]">)
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { supabase } = await requireUser();
-  const bundle = await getCycleBundle(supabase, id);
+  const [bundle, extras] = await Promise.all([getCycleBundle(supabase, id), getCycleExtras(supabase, id)]);
   if (!bundle) notFound();
 
   const { cycle, items, transactions } = bundle;
@@ -108,7 +109,7 @@ export default async function CycleDetail({ params }: PageProps<"/cycles/[id]">)
 
       <section aria-labelledby="env-title">
         <h2 id="env-title" className="section-title mb-3">Envelopes</h2>
-        <EnvelopeBars envelopes={s.envelopes} cycleId={cycle.id} readOnly={closed} />
+        <EnvelopeBars envelopes={s.envelopes} cycleId={cycle.id} readOnly={closed} histories={extras.histories} loans={extras.loanOptions} />
         {!closed && envelopeItems.length > 0 && (
           <details className="mt-3">
             <summary className="text-sm text-muted hover:text-text">Edit envelope amounts</summary>
@@ -135,6 +136,7 @@ export default async function CycleDetail({ params }: PageProps<"/cycles/[id]">)
               maxDate={cycle.end_date}
               defaultDate={defaultDate}
               idPrefix="detail-log"
+              loans={extras.loanOptions}
             />
           </div>
         )}
@@ -146,12 +148,23 @@ export default async function CycleDetail({ params }: PageProps<"/cycles/[id]">)
               <li key={t.id} className="row block">
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{t.note || (t.cycle_item_id ? envelopeName.get(t.cycle_item_id) : "Unplanned")}</p>
+                    <p className="truncate font-medium">
+                      {t.kind === "lend"
+                        ? `Lent to ${t.counterparty}`
+                        : t.kind === "refund"
+                          ? t.repays_id ? `${t.counterparty ?? "Loan"} paid back` : `Money back${t.counterparty ? ` from ${t.counterparty}` : ""}`
+                          : t.note || (t.cycle_item_id ? envelopeName.get(t.cycle_item_id) : "Unplanned")}
+                    </p>
                     <p className="text-sm text-muted">
-                      {formatShortDate(t.date)} · {t.cycle_item_id ? envelopeName.get(t.cycle_item_id) : "Unplanned"}
+                      {formatShortDate(t.date)} · {t.kind === "refund" ? "into " : ""}
+                      {t.cycle_item_id ? envelopeName.get(t.cycle_item_id) : "Unplanned"}
+                      {t.kind !== "spend" && t.kind && t.note ? ` · ${t.note}` : ""}
                     </p>
                   </div>
-                  <Money cents={t.amount_cents} />
+                  <span className={`money ${t.kind === "refund" ? "text-good" : t.kind === "lend" ? "text-warn" : ""}`}>
+                    {t.kind === "refund" ? "+" : ""}
+                    <Money cents={t.amount_cents} />
+                  </span>
                 </div>
                 {!closed && (
                   <details className="mt-1">

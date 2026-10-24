@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/PageHeader";
 export const metadata = { title: "More" };
 
 const LINKS = [
+  { href: "/history", label: "History", hint: "Every income, allocation, spend and loan, with undo" },
   { href: "/reserves", label: "Reserves", hint: "Named pots and their balances" },
   { href: "/todos", label: "To do", hint: "Money admin checklist" },
   { href: "/settings", label: "Settings", hint: "Cycle start day, backups, sign out" },

@@ -151,7 +151,10 @@ export default async function IncomePage() {
       </section>
 
       <section aria-labelledby="alloc-title">
-        <h2 id="alloc-title" className="section-title mb-2">Allocations</h2>
+        <div className="mb-2 flex items-baseline justify-between">
+          <h2 id="alloc-title" className="section-title">Allocations</h2>
+          <Link href="/history?show=allocations" className="link text-sm">Full history</Link>
+        </div>
         {allocations.length === 0 ? (
           <p className="text-muted">Nothing allocated yet.</p>
         ) : (
