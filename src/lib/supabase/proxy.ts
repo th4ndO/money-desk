@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { skewTolerantFetch } from "./fetch";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAllowedEmail, supabaseAnonKey, supabaseUrl } from "@/lib/env";
 
@@ -36,6 +37,7 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl(), supabaseAnonKey(), {
+    global: { fetch: skewTolerantFetch },
     cookies: {
       getAll() {
         return request.cookies.getAll();

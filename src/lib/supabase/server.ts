@@ -1,5 +1,6 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
+import { skewTolerantFetch } from "./fetch";
 import { cookies } from "next/headers";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/env";
 
@@ -12,6 +13,7 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(supabaseUrl(), supabaseAnonKey(), {
+    global: { fetch: skewTolerantFetch },
     cookies: {
       getAll() {
         return cookieStore.getAll();

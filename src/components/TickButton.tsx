@@ -1,7 +1,7 @@
 "use client";
 
 import { useOptimistic, useTransition } from "react";
-import type { ActionResult } from "@/lib/actions";
+import { type ActionResult, UNREACHABLE } from "@/lib/actions";
 import { useToast } from "./Toast";
 
 /**
@@ -42,7 +42,12 @@ export function TickButton({
           const fd = new FormData();
           fd.set("id", itemId);
           fd.set("paid", String(!optimistic));
-          toast(await action(null, fd));
+          try {
+            toast(await action(null, fd));
+          } catch (e) {
+            if (e && typeof e === "object" && "digest" in e && String((e as { digest: unknown }).digest).startsWith("NEXT_REDIRECT")) throw e;
+            toast({ ok: false, message: UNREACHABLE });
+          }
         })
       }
     >

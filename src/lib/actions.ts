@@ -9,6 +9,7 @@ export const ok = (message: string): ActionResult => ({ ok: true, message, at: D
 export const fail = (message: string): ActionResult => ({ ok: false, message, at: Date.now() });
 
 export const NETWORK_FAIL = "Couldn't save. Check your connection and try again.";
+export const UNREACHABLE = "Couldn't reach Money Desk, so nothing was saved. Check your signal and try again.";
 
 /** Amount typed as rands ("1 585", "113,21") → integer cents. */
 export const zMoney = z
