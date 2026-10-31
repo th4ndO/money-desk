@@ -9,6 +9,10 @@ export const metadata: Metadata = {
   title: { default: "Money Desk", template: "%s · Money Desk" },
   description: "Personal pay-cycle budget.",
   robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } },
+  applicationName: "Money Desk",
+  // iPhone home-screen app: full screen, its own name under the icon.
+  appleWebApp: { capable: true, title: "Money Desk", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
