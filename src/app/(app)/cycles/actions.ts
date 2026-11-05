@@ -17,8 +17,9 @@ import {
   zPositiveMoney,
 } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
-import { generateCycleItems, newCycleBounds, plannedTotal } from "@/lib/cycles";
-import { asRecurringItems, cycleIsOpen, getRecurring, getSettings, getWorkingCycle } from "@/lib/data";
+import { createCycleStarting } from "@/lib/cycle-start";
+import { cycleIsOpen, getCycleBundle, getWorkingCycle, leftoverSource } from "@/lib/data";
+import { summariseCycle } from "@/lib/summary";
 import { formatDate, todayJHB } from "@/lib/dates";
 import { formatZAR } from "@/lib/money";
 
@@ -38,31 +39,12 @@ export async function startCycle(_prev: ActionResult | null, fd: FormData): Prom
   if (!parsed.ok) return parsed.result;
   const { supabase } = await requireUser();
 
-  const [settings, recurring, existing] = await Promise.all([
-    getSettings(supabase),
-    getRecurring(supabase),
-    supabase.from("cycles").select("start_date, end_date"),
-  ]);
-  if (existing.error) return fail(NETWORK_FAIL);
+  const result = await createCycleStarting(supabase, parsed.data.start_date);
+  if (!result.ok) return fail(result.reason === "covered" ? "A cycle already covers those dates." : NETWORK_FAIL);
 
-  const bounds = newCycleBounds(parsed.data.start_date, settings.cycle_start_day, existing.data);
-  if (!bounds) return fail("A cycle already covers that date.");
-
-  const items = generateCycleItems(asRecurringItems(recurring), bounds.start_date, bounds.end_date);
-  const { data: cycleId, error } = await supabase.rpc("create_cycle", {
-    p_name: bounds.name,
-    p_start: bounds.start_date,
-    p_end: bounds.end_date,
-    p_pocket: plannedTotal(items),
-    p_items: items,
-  });
-  if (error) {
-    return fail(error.code === "23505" || error.code === "23P01" ? "A cycle already covers those dates." : NETWORK_FAIL);
-  }
-
-  if (parsed.data.go === "detail") redirect(`/cycles/${cycleId}`);
+  if (parsed.data.go === "detail") redirect(`/cycles/${result.cycleId}`);
   refresh();
-  return ok(`Started ${bounds.name}`);
+  return ok(`Started ${result.bounds.name}`);
 }
 
 /* Bills ------------------------------------------------------------------- */
@@ -450,4 +432,33 @@ export async function deleteCycle(_prev: ActionResult | null, fd: FormData): Pro
   const { error } = await supabase.from("cycles").delete().eq("id", parsed.data.id);
   if (error) return fail(NETWORK_FAIL);
   redirect("/cycles");
+}
+
+/**
+ * Move what was left in a finished cycle's pocket into Ready to allocate,
+ * once. It's recorded as an income line named after the cycle, so it shows
+ * in History and can be deleted there if it was a mistake.
+ */
+export async function carryOverLeftover(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const parsed = parseForm(z.object({ cycle_id: zId }), fd);
+  if (!parsed.ok) return parsed.result;
+  const { supabase } = await requireUser();
+  const bundle = await getCycleBundle(supabase, parsed.data.cycle_id);
+  if (!bundle) return fail("That cycle no longer exists. Refresh the page.");
+  const today = todayJHB();
+  if (today <= bundle.cycle.end_date) return fail(`${bundle.cycle.name} hasn't ended yet.`);
+
+  const left = summariseCycle(bundle.cycle, bundle.items, bundle.transactions, today).left;
+  if (left <= 0) return fail(`Nothing was left over from ${bundle.cycle.name}.`);
+
+  const source = leftoverSource(bundle.cycle.name);
+  const { count } = await supabase.from("income").select("id", { count: "exact", head: true }).eq("source", source);
+  if ((count ?? 0) > 0) return fail(`${bundle.cycle.name}'s leftover was already carried over.`);
+
+  const { error } = await supabase
+    .from("income")
+    .insert({ amount_cents: left, date: today, source, notes: "Carried over from the previous cycle" });
+  if (error) return fail(NETWORK_FAIL);
+  refresh();
+  return ok(`${formatZAR(left)} from ${bundle.cycle.name} is now ready to allocate`);
 }

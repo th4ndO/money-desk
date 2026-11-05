@@ -18,7 +18,7 @@ if (!url || !key) {
   process.exit(1);
 }
 
-const tables = ["settings", "recurring_items", "cycles", "cycle_items", "transactions", "income", "reserves", "todos", "allocations"];
+const tables = ["settings", "recurring_items", "cycles", "cycle_items", "transactions", "income", "reserves", "todos", "allocations", "wishlist"];
 let leaked = false;
 
 for (const table of tables) {

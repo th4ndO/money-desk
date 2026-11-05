@@ -11,7 +11,7 @@ const LINKS = [
   { href: "/more", label: "More" },
 ];
 
-const MORE = ["/more", "/reserves", "/todos", "/settings", "/history"];
+const MORE = ["/more", "/reserves", "/todos", "/settings", "/history", "/wishlist"];
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";

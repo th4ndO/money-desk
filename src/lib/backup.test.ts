@@ -23,6 +23,7 @@ describe("seed backup", () => {
       reserves: 2,
       todos: 5,
       allocations: 0,
+      wishlist: 0,
     });
   });
 

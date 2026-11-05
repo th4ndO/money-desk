@@ -113,6 +113,21 @@ export const backupSchema = z
         }),
       )
       .default([]),
+    // Added with the wish list; older backups have none.
+    wishlist: z
+      .array(
+        z.object({
+          id: uuid,
+          name: text(100),
+          price_cents: cents,
+          link: z.string().max(500).regex(/^https?:\/\//i).nullable().default(null),
+          priority: z.number().int().min(1).max(3).default(2),
+          notes: optionalText(500),
+          bought_on: date.nullable().default(null),
+          sort_order: z.number().int().default(0),
+        }),
+      )
+      .default([]),
   })
   .superRefine((b, ctx) => {
     const cycleIds = new Set(b.cycles.map((c) => c.id));
@@ -154,6 +169,7 @@ export const BACKUP_TABLES = [
   "reserves",
   "todos",
   "allocations",
+  "wishlist",
 ] as const;
 export type BackupTable = (typeof BACKUP_TABLES)[number];
 

@@ -11,7 +11,6 @@ const p=await ctx.newPage();
 const settle=()=>p.waitForFunction(()=>!document.querySelector('[aria-busy="true"]'));
 const check=(n,c,d="")=>console.log(`${c?"PASS":"FAIL"}  ${n}${d?"  — "+d:""}`);
 await p.goto("http://localhost:3200/"); await settle();
-const before = await p.textContent("main");
 
 // 1. Offline save
 await ctx.setOffline(true);

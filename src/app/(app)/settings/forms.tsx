@@ -42,6 +42,8 @@ const LABELS: Record<string, string> = {
   income: "income entries",
   reserves: "reserves",
   todos: "to-dos",
+  allocations: "allocations",
+  wishlist: "wish list items",
 };
 
 export function ImportForm() {

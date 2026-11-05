@@ -9,7 +9,11 @@ import { Pill } from "@/components/Pill";
 import { StartCycleButton } from "@/components/StartCycleButton";
 import { requireUser } from "@/lib/auth";
 import { generateCycleItems, plannedTotal, proposeCycleForToday } from "@/lib/cycles";
-import { asRecurringItems, getCycleBundle, getCycleCovering, getNextOpenCycle, getReadyToAllocate, getRecurring, getSettings } from "@/lib/data";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { LeftoverCard } from "@/components/LeftoverCard";
+import { ensureCurrentCycle } from "@/lib/cycle-start";
+import { asRecurringItems, getCycleBundle, getNextOpenCycle, getPreviousCycle, getReadyToAllocate, getRecurring, getSettings, leftoverSource } from "@/lib/data";
+import type { CycleRow } from "@/lib/types";
 import { formatDate, formatShortDate, todayJHB } from "@/lib/dates";
 import { healthTone, summariseCycle } from "@/lib/summary";
 
@@ -18,7 +22,8 @@ export const metadata = { title: "Today" };
 export default async function Dashboard() {
   const { supabase } = await requireUser();
   const today = todayJHB();
-  const [covering, ready] = await Promise.all([getCycleCovering(supabase, today), getReadyToAllocate(supabase)]);
+  // Starts the cycle by itself when its first day comes.
+  const [covering, ready] = await Promise.all([ensureCurrentCycle(supabase, today), getReadyToAllocate(supabase)]);
 
   if (!covering) return <NoCycle today={today} />;
 
@@ -27,7 +32,12 @@ export default async function Dashboard() {
   const ahead = covering.closed_at ? await getNextOpenCycle(supabase, covering.end_date) : null;
   const current = ahead ?? covering;
 
-  const [bundle, extras] = await Promise.all([getCycleBundle(supabase, current.id), getCycleExtras(supabase, current.id)]);
+  const [bundle, extras, previous] = await Promise.all([
+    getCycleBundle(supabase, current.id),
+    getCycleExtras(supabase, current.id),
+    getPreviousCycle(supabase, current.start_date),
+  ]);
+  const leftover = previous ? await previousLeftover(supabase, previous, today) : null;
   if (!bundle) return <NoCycle today={today} />;
   const { cycle, items, transactions } = bundle;
   const s = summariseCycle(cycle, items, transactions, today);
@@ -80,6 +90,10 @@ export default async function Dashboard() {
           </span>
           <span className="btn btn-primary btn-sm">{ready > 0 ? "Allocate" : "Review"}</span>
         </Link>
+      )}
+
+      {leftover && (
+        <LeftoverCard cycleId={leftover.id} name={leftover.name} left={leftover.left} carried={leftover.carried} />
       )}
 
       <section className="grid grid-cols-2 gap-3">
@@ -199,4 +213,21 @@ async function NoCycle({ today }: { today: string }) {
       </div>
     </div>
   );
+}
+
+/** What was left in the previous cycle's pocket, and whether it was carried over. */
+async function previousLeftover(supabase: SupabaseClient, previous: CycleRow, today: string) {
+  const [bundle, carried] = await Promise.all([
+    getCycleBundle(supabase, previous.id),
+    supabase.from("income").select("id", { count: "exact", head: true }).eq("source", leftoverSource(previous.name)),
+  ]);
+  if (!bundle) return null;
+  const left = summariseCycle(bundle.cycle, bundle.items, bundle.transactions, today).left;
+  return {
+    id: previous.id,
+    name: previous.name,
+    left,
+    // A cycle's leftover can only be moved once the cycle is over.
+    carried: (carried.count ?? 0) > 0 || today <= previous.end_date,
+  };
 }

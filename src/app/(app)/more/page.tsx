@@ -5,6 +5,7 @@ export const metadata = { title: "More" };
 
 const LINKS = [
   { href: "/history", label: "History", hint: "Every income, allocation, spend and loan, with undo" },
+  { href: "/wishlist", label: "Wish list", hint: "Things you'd like to buy and what they cost" },
   { href: "/reserves", label: "Reserves", hint: "Named pots and their balances" },
   { href: "/todos", label: "To do", hint: "Money admin checklist" },
   { href: "/settings", label: "Settings", hint: "Cycle start day, backups, sign out" },

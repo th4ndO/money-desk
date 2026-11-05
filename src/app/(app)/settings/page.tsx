@@ -15,6 +15,8 @@ const CSV_LABELS: Record<string, string> = {
   income: "Income",
   reserves: "Reserves",
   todos: "To-dos",
+  allocations: "Allocations",
+  wishlist: "Wish list",
 };
 
 export default async function SettingsPage() {

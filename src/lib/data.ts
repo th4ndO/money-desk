@@ -10,14 +10,26 @@ type DB = SupabaseClient;
 
 const SETTINGS_COLS = "id, cycle_start_day, currency, timezone, bank_balance_cents, bank_balance_on";
 
-/** The settings row, created with defaults the first time. */
+/**
+ * The settings row, created with defaults the first time. Two requests can
+ * arrive together on a brand-new account (a page and its prefetch), so the
+ * insert ignores a row the other one just made and then reads it back.
+ */
 export async function getSettings(supabase: DB): Promise<SettingsRow> {
-  const { data, error } = await supabase.from("settings").select(SETTINGS_COLS).maybeSingle();
-  if (error) throw error;
-  if (data) return data as SettingsRow;
-  const inserted = await supabase.from("settings").upsert({}, { onConflict: "user_id" }).select(SETTINGS_COLS).single();
-  if (inserted.error) throw inserted.error;
-  return inserted.data as SettingsRow;
+  const read = () => supabase.from("settings").select(SETTINGS_COLS).maybeSingle();
+  const first = await read();
+  if (first.error) throw first.error;
+  if (first.data) return first.data as SettingsRow;
+  const insert = await supabase
+    .from("settings")
+    .upsert({ cycle_start_day: 23 }, { onConflict: "user_id", ignoreDuplicates: true });
+  if (insert.error) throw insert.error;
+  // A different query on purpose: Next.js reuses the answer to an identical
+  // request made earlier in the same render, which would still say "none".
+  const second = await supabase.from("settings").select(SETTINGS_COLS).limit(1).maybeSingle();
+  if (second.error) throw second.error;
+  if (!second.data) throw new Error("Couldn't create settings");
+  return second.data as SettingsRow;
 }
 
 export async function getCycles(supabase: DB): Promise<CycleRow[]> {
@@ -29,13 +41,16 @@ export async function getCycles(supabase: DB): Promise<CycleRow[]> {
   return data as CycleRow[];
 }
 
-export async function getCycleCovering(supabase: DB, day: ISODate): Promise<CycleRow | null> {
-  const { data, error } = await supabase
+export async function getCycleCovering(supabase: DB, day: ISODate, afterWrite = false): Promise<CycleRow | null> {
+  let q = supabase
     .from("cycles")
     .select("id, name, start_date, end_date, pocket_cents, closed_at, notes")
     .lte("start_date", day)
-    .gte("end_date", day)
-    .maybeSingle();
+    .gte("end_date", day);
+  // After creating a cycle in the same render, ask differently: Next.js
+  // would otherwise hand back the earlier, identical "no cycle" answer.
+  if (afterWrite) q = q.order("start_date").limit(1);
+  const { data, error } = await q.maybeSingle();
   if (error) throw error;
   return data as CycleRow | null;
 }
@@ -188,4 +203,22 @@ export async function getHistorySources(supabase: DB, cycleId?: string): Promise
     reserveNames: new Map((reserves.data ?? []).map((r) => [r.id, r.name])),
     cycleNames: new Map((cycles.data ?? []).map((c) => [c.id, c.name])),
   };
+}
+
+/** The cycle that ended most recently before `before`. */
+export async function getPreviousCycle(supabase: DB, before: ISODate): Promise<CycleRow | null> {
+  const { data, error } = await supabase
+    .from("cycles")
+    .select("id, name, start_date, end_date, pocket_cents, closed_at, notes")
+    .lt("end_date", before)
+    .order("end_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data as CycleRow | null;
+}
+
+/** The income line used when a cycle's leftover is carried over. */
+export function leftoverSource(cycleName: string) {
+  return `Left over from ${cycleName}`;
 }
