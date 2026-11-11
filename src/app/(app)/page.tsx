@@ -11,6 +11,9 @@ import { requireUser } from "@/lib/auth";
 import { generateCycleItems, plannedTotal, proposeCycleForToday } from "@/lib/cycles";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { LeftoverCard } from "@/components/LeftoverCard";
+import { BankCheckCard } from "@/components/BankCheckCard";
+import { daysSinceCheck } from "@/lib/bank-check";
+import { getBankCheck } from "@/lib/bank-check-data";
 import { ensureCurrentCycle } from "@/lib/cycle-start";
 import { asRecurringItems, getCycleBundle, getNextOpenCycle, getPreviousCycle, getReadyToAllocate, getRecurring, getSettings, leftoverSource } from "@/lib/data";
 import type { CycleRow } from "@/lib/types";
@@ -32,10 +35,11 @@ export default async function Dashboard() {
   const ahead = covering.closed_at ? await getNextOpenCycle(supabase, covering.end_date) : null;
   const current = ahead ?? covering;
 
-  const [bundle, extras, previous] = await Promise.all([
+  const [bundle, extras, previous, bank] = await Promise.all([
     getCycleBundle(supabase, current.id),
     getCycleExtras(supabase, current.id),
     getPreviousCycle(supabase, current.start_date),
+    getBankCheck(supabase, current, today),
   ]);
   const leftover = previous ? await previousLeftover(supabase, previous, today) : null;
   if (!bundle) return <NoCycle today={today} />;
@@ -44,6 +48,13 @@ export default async function Dashboard() {
   const closed = cycle.closed_at !== null;
   const billItems = items.filter((i) => i.kind !== "envelope");
   const billsPlanned = billItems.reduce((t, i) => t + i.planned_cents, 0);
+  // The envelopes used most this cycle, for one-tap logging.
+  const uses = new Map<string, number>();
+  for (const t of transactions) if (t.cycle_item_id) uses.set(t.cycle_item_id, (uses.get(t.cycle_item_id) ?? 0) + 1);
+  const envelopeOptions = s.envelopes.map((e) => ({ id: e.id, name: e.name }));
+  const quick = [...envelopeOptions]
+    .sort((a, b) => (uses.get(b.id) ?? 0) - (uses.get(a.id) ?? 0))
+    .slice(0, 3);
 
   return (
     <div className="space-y-6">
@@ -75,6 +86,13 @@ export default async function Dashboard() {
         </p>
       </section>
 
+      {!closed && (
+        <section id="log" className="card scroll-mt-4" aria-labelledby="log-title">
+          <h2 id="log-title" className="section-title mb-3">Log spending</h2>
+          <LogSpendForm cycleId={cycle.id} envelopes={envelopeOptions} quick={quick} loans={extras.loanOptions} focusOnHash="log" />
+        </section>
+      )}
+
       {!closed && s.planned > s.pocket && (
         <Link href={`/allocate?cycle=${cycle.id}`} className="notice block text-sm">
           <Money cents={s.planned - s.pocket} /> of this cycle&apos;s plan isn&apos;t funded yet.{" "}
@@ -96,6 +114,16 @@ export default async function Dashboard() {
         <LeftoverCard cycleId={leftover.id} name={leftover.name} left={leftover.left} carried={leftover.carried} />
       )}
 
+      {!closed && (
+        <BankCheckCard
+          check={bank.check}
+          balance={bank.balance}
+          balanceOn={bank.balanceOn}
+          today={today}
+          daysSince={daysSinceCheck(bank.balanceOn, today)}
+        />
+      )}
+
       <section className="grid grid-cols-2 gap-3">
         <div className="card">
           <p className="text-sm text-muted">Safe per day</p>
@@ -108,13 +136,6 @@ export default async function Dashboard() {
           <p className="text-xs text-muted"><Money cents={s.billsDue} /> still due</p>
         </div>
       </section>
-
-      {!closed && (
-        <section className="card" aria-labelledby="log-title">
-          <h2 id="log-title" className="section-title mb-3">Log spending</h2>
-          <LogSpendForm cycleId={cycle.id} envelopes={s.envelopes.map((e) => ({ id: e.id, name: e.name }))} loans={extras.loanOptions} />
-        </section>
-      )}
 
       <OwedToYou loans={extras.loans} />
 

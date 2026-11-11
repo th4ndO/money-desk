@@ -25,3 +25,15 @@
 - Supabase's built-in email sender allows only a few sign-in emails per hour. If you hit the
   limit, wait an hour or add your own SMTP in Supabase → Authentication → Emails.
 - Applying a future migration: paste the new file into Supabase → SQL editor, or ask Claude.
+- The database is kept awake by a daily Vercel Cron call to `/api/keep-alive` (`vercel.json`),
+  which makes one anonymous query that RLS refuses. It stops free-plan idle pausing only; a
+  project paused by Supabase for billing reasons has to be restored from the Supabase dashboard.
+
+## Check against bank (Today)
+
+Enter what the banking app shows. Money Desk expects: this cycle's pocket left (unpaid bills,
+unspent envelopes) + Ready to allocate + allocations to later cycles + reserves + last cycle's
+leftover if not carried over. The difference can be recorded as income ("Unrecorded money (bank
+check)") into Ready to allocate or a per-cycle "Free money" envelope, or, if the bank has less,
+logged as unplanned spending. The gap is recomputed on the server and only acted on for a
+balance entered today. Browser test: `scripts/e2e/bank-check.mjs` (20 checks).

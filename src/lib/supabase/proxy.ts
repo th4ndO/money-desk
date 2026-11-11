@@ -3,7 +3,7 @@ import { skewTolerantFetch } from "./fetch";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAllowedEmail, supabaseAnonKey, supabaseUrl } from "@/lib/env";
 
-const PUBLIC_PATHS = ["/login", "/auth/confirm"];
+const PUBLIC_PATHS = ["/login", "/auth/confirm", "/api/keep-alive"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
